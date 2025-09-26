@@ -1,0 +1,32 @@
+# Test data for teams
+teams:
+  senior-backend:
+    description: "Senior backend developers with merge permissions"
+    members:
+      - "alice"
+      - "eve"
+
+  security-team:
+    description: "Security and compliance team"
+    members:
+      - "bob"
+      - "eve"
+
+  platform-team:
+    description: "Platform and infrastructure team"
+    members:
+      - "alice"
+      - "bob"
+      - "charlie"
+
+  frontend-team:
+    description: "Frontend development team"
+    members:
+      - "david"
+      - "eve"
+
+  database-team:
+    description: "Database and schema management team"
+    members:
+      - "alice"
+      - "frank"

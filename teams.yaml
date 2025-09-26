@@ -1,0 +1,32 @@
+# teams.yaml - Team definitions with external user memberships
+teams:
+  senior-backend:
+    description: "Senior backend developers with merge permissions"
+    members:
+      - "alice" # GitHub username
+      - "eve" # GitHub username
+
+  security-team:
+    description: "Security and compliance team"
+    members:
+      - "bob" # GitHub username
+      - "eve" # GitHub username
+
+  platform-team:
+    description: "Platform and infrastructure team"
+    members:
+      - "alice" # GitHub username
+      - "bob" # GitHub username
+      - "charlie" # GitHub username
+
+  frontend-team:
+    description: "Frontend development team"
+    members:
+      - "david" # GitHub username
+      - "eve" # GitHub username
+
+  database-team:
+    description: "Database and schema management team"
+    members:
+      - "alice" # GitHub username
+      - "frank" # GitHub username

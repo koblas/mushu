@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -179,8 +180,9 @@ func runValidate(ctx context.Context, cfg *config.Config, prStr string) error {
 	logging.Debug(ctx, "Created GitHub client", "base_url", cfg.GitHub.BaseURL)
 
 	// Create team service
-	yamlService := teams.NewYAMLTeamService(cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
-	if err := yamlService.Load(ctx); err != nil {
+	yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
+	// Load teams (optional - only fail on real errors, not missing files)
+	if err := yamlService.Load(ctx); err != nil && !errors.Is(err, os.ErrNotExist) {
 		logging.Error(ctx, "Failed to load teams from YAML", "error", err)
 		return fmt.Errorf("failed to load teams: %w", err)
 	}
@@ -288,8 +290,8 @@ func listTeams(ctx context.Context, cfg *config.Config) error {
 
 	fmt.Println("Available teams:")
 
-	// Load teams from YAML
-	yamlService := teams.NewYAMLTeamService(cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
+	// Load teams from YAML (optional - only fail on real errors, not missing files)
+	yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
 	if err := yamlService.Load(ctx); err != nil {
 		logging.Error(ctx, "Failed to load teams from YAML", "error", err)
 		return fmt.Errorf("failed to load teams: %w", err)

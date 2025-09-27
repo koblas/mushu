@@ -2,11 +2,12 @@ package teams
 
 import (
 	"context"
+	"os"
 	"testing"
 )
 
 func TestYAMLTeamService(t *testing.T) {
-	service := NewYAMLTeamService("testdata/teams.yaml", "")
+	service := NewYAMLTeamService(os.DirFS("."), "testdata/teams.yaml", "")
 
 	ctx := context.Background()
 	err := service.Load(ctx)
@@ -38,7 +39,7 @@ func TestYAMLTeamService(t *testing.T) {
 }
 
 func TestCompositeTeamService(t *testing.T) {
-	yamlService := NewYAMLTeamService("testdata/teams.yaml", "")
+	yamlService := NewYAMLTeamService(os.DirFS("."), "testdata/teams.yaml", "")
 	compositeService := NewCompositeTeamService(yamlService, nil, false)
 
 	ctx := context.Background()

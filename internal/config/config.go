@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -51,7 +52,7 @@ type LoggingConfig struct {
 }
 
 // Load loads configuration with proper priority: file -> environment -> command line
-func Load(configPath string, flagSet *flag.FlagSet) (*Config, error) {
+func Load(ctx context.Context, configPath string, flagSet *flag.FlagSet) (*Config, error) {
 	// Use command line config file if provided, otherwise use default
 	if flagSet != nil {
 		if configFlag := flagSet.Lookup("config"); configFlag != nil && configFlag.Value.String() != "" {

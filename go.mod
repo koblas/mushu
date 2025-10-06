@@ -4,6 +4,7 @@ go 1.25
 
 require (
 	github.com/google/go-github/v60 v60.0.0
+	github.com/google/go-github/v75 v75.0.0
 	github.com/knadh/koanf v1.5.0
 	github.com/knadh/koanf/v2 v2.3.0
 	github.com/stretchr/testify v1.7.0

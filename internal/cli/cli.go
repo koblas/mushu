@@ -64,7 +64,7 @@ func Execute(ctx context.Context) error {
 	}
 
 	// Load config with command line flags (highest priority)
-	cfg, err := config.Load("", fs)
+	cfg, err := config.Load(ctx, "", fs)
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
@@ -120,7 +120,7 @@ func runListCommand(ctx context.Context, cfg *config.Config, args []string) erro
 }
 
 // runVersionCommand handles the version command
-func runVersionCommand(ctx context.Context, cfg *config.Config, args []string) error {
+func runVersionCommand(ctx context.Context, _ *config.Config, _ []string) error {
 	logging.Info(ctx, "Version command executed")
 
 	info := version.Get()
@@ -170,14 +170,15 @@ func runValidate(ctx context.Context, cfg *config.Config, prStr string) error {
 
 	logging.Debug(ctx, "Parsed PR number", "pr_number", prNumber)
 
-	// Create GitHub client
-	client, err := github.CreateGitHubClient(cfg.GitHub.Token, cfg.GitHub.BaseURL)
+	client, err := github.NewClient(ctx, &github.Config{
+		Token:   cfg.GitHub.Token,
+		BaseURL: cfg.GitHub.BaseURL,
+		Owner:   cfg.GitHub.Owner,
+		Repo:    cfg.GitHub.Repo,
+	})
 	if err != nil {
-		logging.Error(ctx, "Failed to create GitHub client", "error", err)
 		return fmt.Errorf("failed to create GitHub client: %w", err)
 	}
-
-	logging.Debug(ctx, "Created GitHub client", "base_url", cfg.GitHub.BaseURL)
 
 	// Create team service
 	yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
@@ -188,25 +189,26 @@ func runValidate(ctx context.Context, cfg *config.Config, prStr string) error {
 	}
 
 	var teamService teams.TeamService = yamlService
-	if cfg.Teams.UseGitHubAPI {
-		logging.Debug(ctx, "Using GitHub API for team management")
-		githubTeamService := teams.NewGitHubTeamService(client, cfg.GitHub.Owner, cfg.GitHub.Repo)
-		teamService = teams.NewCompositeTeamService(yamlService, githubTeamService, true)
-	} else {
-		logging.Debug(ctx, "Using YAML-only team management")
-	}
+	// if cfg.Teams.UseGitHubAPI {
+	// 	logging.Debug(ctx, "Using GitHub API for team management")
+	// 	githubTeamService := teams.NewGitHubTeamService(client, cfg.GitHub.Owner, cfg.GitHub.Repo)
+	// 	teamService = teams.NewCompositeTeamService(yamlService, githubTeamService, true)
+	// } else {
+	// 	logging.Debug(ctx, "Using YAML-only team management")
+	// }
 
 	// Create policy engine
 	policyEngine := policy.NewPolicyEngine(teamService, cfg.Policy.RulesFile)
 	logging.Debug(ctx, "Created policy engine", "rules_file", cfg.Policy.RulesFile)
 
-	// Create GitHub service
-	githubService := github.NewGitHubService(client, cfg.GitHub.Owner, cfg.GitHub.Repo, teamService)
-	logging.Debug(ctx, "Created GitHub service", "owner", cfg.GitHub.Owner, "repo", cfg.GitHub.Repo)
+	data, err := client.GetPRData(ctx, prNumber, teamService)
+	if err != nil {
+		return fmt.Errorf("failed to get PR data: %w", err)
+	}
 
 	// Validate PR
 	logging.Info(ctx, "Validating PR", "pr_number", prNumber)
-	result, err := githubService.ValidatePR(ctx, prNumber, policyEngine)
+	result, err := policyEngine.EvaluatePR(ctx, data)
 	if err != nil {
 		logging.Error(ctx, "PR validation failed", "pr_number", prNumber, "error", err)
 		return fmt.Errorf("failed to validate PR: %w", err)
@@ -288,8 +290,6 @@ func listPolicies(ctx context.Context, cfg *config.Config) error {
 func listTeams(ctx context.Context, cfg *config.Config) error {
 	logging.Info(ctx, "Listing available teams")
 
-	fmt.Println("Available teams:")
-
 	// Load teams from YAML (optional - only fail on real errors, not missing files)
 	yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
 	if err := yamlService.Load(ctx); err != nil {
@@ -298,8 +298,9 @@ func listTeams(ctx context.Context, cfg *config.Config) error {
 	}
 
 	// List teams (this would need to be implemented in the team service)
-	fmt.Println("Teams loaded from YAML files")
 	logging.Debug(ctx, "Teams loaded successfully", "teams_file", cfg.Teams.TeamsFile, "teams_dir", cfg.Teams.TeamsDir)
+
+	fmt.Println("Available teams:")
 
 	return nil
 }

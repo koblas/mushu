@@ -3,10 +3,9 @@ package github
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strconv"
 
-	"github.com/google/go-github/v60/github"
+	"github.com/google/go-github/v75/github"
 	"github.com/koblas/mushu/internal/policy"
 	"github.com/koblas/mushu/internal/rules"
 	"github.com/koblas/mushu/internal/teams"
@@ -31,7 +30,7 @@ func NewGitHubService(client *github.Client, owner, repo string, teamService tea
 }
 
 // GetPRData fetches pull request data from GitHub
-func (gs *GitHubService) GetPRData(ctx context.Context, prNumber int) (*policy.PRData, error) {
+func (gs *Client) GetPRData(ctx context.Context, prNumber int, lookup teams.Lookup) (*policy.PRData, error) {
 	// Get PR details
 	pr, _, err := gs.client.PullRequests.Get(ctx, gs.owner, gs.repo, prNumber)
 	if err != nil {
@@ -50,6 +49,11 @@ func (gs *GitHubService) GetPRData(ctx context.Context, prNumber int) (*policy.P
 		return nil, fmt.Errorf("failed to get PR reviews: %w", err)
 	}
 
+	annotated, err := gs.convertReviews(ctx, reviews, lookup)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert PR reviews: %w", err)
+	}
+
 	// Convert to internal format
 	prData := &policy.PRData{
 		Number:       prNumber,
@@ -61,7 +65,7 @@ func (gs *GitHubService) GetPRData(ctx context.Context, prNumber int) (*policy.P
 		ChangedFiles: pr.GetChangedFiles(),
 		Labels:       gs.extractLabels(pr.Labels),
 		Files:        gs.convertFiles(files),
-		Reviews:      gs.convertReviews(reviews),
+		Reviews:      annotated,
 	}
 
 	// Get reviewers
@@ -72,7 +76,7 @@ func (gs *GitHubService) GetPRData(ctx context.Context, prNumber int) (*policy.P
 }
 
 // extractLabels extracts label names from GitHub labels
-func (gs *GitHubService) extractLabels(labels []*github.Label) []string {
+func (gs *Client) extractLabels(labels []*github.Label) []string {
 	var names []string
 	for _, label := range labels {
 		names = append(names, label.GetName())
@@ -81,7 +85,7 @@ func (gs *GitHubService) extractLabels(labels []*github.Label) []string {
 }
 
 // convertFiles converts GitHub files to internal format
-func (gs *GitHubService) convertFiles(files []*github.CommitFile) []rules.PRFile {
+func (gs *Client) convertFiles(files []*github.CommitFile) []rules.PRFile {
 	var prFiles []rules.PRFile
 	for _, file := range files {
 		prFiles = append(prFiles, rules.PRFile{
@@ -96,28 +100,37 @@ func (gs *GitHubService) convertFiles(files []*github.CommitFile) []rules.PRFile
 }
 
 // convertReviews converts GitHub reviews to internal format
-func (gs *GitHubService) convertReviews(reviews []*github.PullRequestReview) []policy.Review {
+func (gs *Client) convertReviews(ctx context.Context, reviews []*github.PullRequestReview, lookup teams.Lookup) ([]policy.Review, error) {
+	users := map[string]struct{}{}
+	for _, review := range reviews {
+		users[review.GetUser().GetLogin()] = struct{}{}
+	}
+
+	// now lookup the teams for each user
+	userToTeams := map[string][]string{}
+	for user := range users {
+		teams, err := lookup.GetUserTeams(ctx, user)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user teams: %w", err)
+		}
+		userToTeams[user] = teams
+	}
+
 	var prReviews []policy.Review
 	for _, review := range reviews {
-		// Get reviewer teams
-		reviewerTeams, err := gs.teamService.GetUserTeams(context.Background(), review.GetUser().GetLogin())
-		if err != nil {
-			// If we can't get teams, continue without them
-			reviewerTeams = []string{}
-		}
-
 		prReviews = append(prReviews, policy.Review{
 			Reviewer:      review.GetUser().GetLogin(),
-			ReviewerTeams: reviewerTeams,
+			ReviewerTeams: userToTeams[review.GetUser().GetLogin()],
 			State:         review.GetState(),
 			SubmittedAt:   review.GetSubmittedAt().Format("2006-01-02T15:04:05Z"),
 		})
 	}
-	return prReviews
+
+	return prReviews, nil
 }
 
 // extractReviewers extracts unique reviewer usernames
-func (gs *GitHubService) extractReviewers(reviews []*github.PullRequestReview) []string {
+func (gs *Client) extractReviewers(reviews []*github.PullRequestReview) []string {
 	reviewerMap := make(map[string]bool)
 	for _, review := range reviews {
 		reviewerMap[review.GetUser().GetLogin()] = true
@@ -131,7 +144,7 @@ func (gs *GitHubService) extractReviewers(reviews []*github.PullRequestReview) [
 }
 
 // countApprovals counts the number of approved reviews
-func (gs *GitHubService) countApprovals(reviews []*github.PullRequestReview) int {
+func (gs *Client) countApprovals(reviews []*github.PullRequestReview) int {
 	count := 0
 	for _, review := range reviews {
 		if review.GetState() == "APPROVED" {
@@ -139,42 +152,6 @@ func (gs *GitHubService) countApprovals(reviews []*github.PullRequestReview) int
 		}
 	}
 	return count
-}
-
-// ValidatePR validates a pull request against policies
-func (gs *GitHubService) ValidatePR(ctx context.Context, prNumber int, policyEngine *policy.PolicyEngine) (*policy.EvaluationResult, error) {
-	// Get PR data
-	prData, err := gs.GetPRData(ctx, prNumber)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get PR data: %w", err)
-	}
-
-	// Evaluate against policies
-	result, err := policyEngine.EvaluatePR(ctx, prData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to evaluate PR: %w", err)
-	}
-
-	return result, nil
-}
-
-// CreateGitHubClient creates a GitHub client with authentication
-func CreateGitHubClient(token string, baseURL string) (*github.Client, error) {
-	if token == "" {
-		return nil, fmt.Errorf("GitHub token is required")
-	}
-
-	client := github.NewClient(nil).WithAuthToken(token)
-
-	if baseURL != "" && baseURL != "https://api.github.com" {
-		var err error
-		client.BaseURL, err = url.Parse(baseURL)
-		if err != nil {
-			return nil, fmt.Errorf("invalid GitHub base URL: %w", err)
-		}
-	}
-
-	return client, nil
 }
 
 // ParsePRNumber parses a PR number from string

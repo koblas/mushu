@@ -16,7 +16,7 @@ func main() {
 	ctx := context.Background()
 
 	// Load initial config for logging setup
-	cfg, err := config.Load("config.yaml", nil)
+	cfg, err := config.Load(ctx, "config.yaml", nil)
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
@@ -41,5 +41,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	logging.Info(ctx, "Application completed successfully")
+	logging.Debug(ctx, "Application completed successfully")
 }

@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"maps"
 	"path/filepath"
 	"strings"
 
-	"github.com/koblas/mushu/internal/logging"
 	"gopkg.in/yaml.v3"
 )
 
@@ -58,7 +58,7 @@ func (s *YAMLTeamService) Load(ctx context.Context) error {
 	if s.teamsFile != "" {
 		if err := s.loadTeamsFile(ctx, s.teamsFile); err != nil {
 			// Log at info level but don't fail - team loading is optional
-			logging.Info(ctx, "Teams file not found or failed to load", "teams_file", s.teamsFile, "error", err)
+			slog.InfoContext(ctx, "Teams file not found or failed to load", "teams_file", s.teamsFile, "error", err)
 
 			return fmt.Errorf("failed to load teams file: %w", err)
 		}
@@ -68,7 +68,7 @@ func (s *YAMLTeamService) Load(ctx context.Context) error {
 	if s.teamsDir != "" {
 		if err := s.loadTeamsDirectory(ctx, s.teamsDir); err != nil {
 			// Log at info level but don't fail - team loading is optional
-			logging.Info(ctx, "Teams directory not found or failed to load", "teams_dir", s.teamsDir, "error", err)
+			slog.InfoContext(ctx, "Teams directory not found or failed to load", "teams_dir", s.teamsDir, "error", err)
 
 			return fmt.Errorf("failed to load teams directory: %w", err)
 		}
@@ -96,7 +96,7 @@ func (s *YAMLTeamService) loadTeamsFile(ctx context.Context, filename string) er
 
 	maps.Copy(s.teams, teamsData.Teams)
 
-	logging.Info(ctx, "Successfully loaded teams file", "teams_file", filename)
+	slog.InfoContext(ctx, "Successfully loaded teams file", "teams_file", filename)
 
 	return nil
 }

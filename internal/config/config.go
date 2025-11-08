@@ -113,7 +113,7 @@ func Load(ctx context.Context, configPath string, flagSet *flag.FlagSet) (*Confi
 	cfg := Config{
 		Logging: LoggingConfig{
 			Level:  "info",
-			Format: "text",
+			Format: "console",
 		},
 	}
 	if err := k.Unmarshal("", &cfg); err != nil {

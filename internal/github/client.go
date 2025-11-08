@@ -2,12 +2,15 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 
 	"github.com/google/go-github/v75/github"
-	"github.com/koblas/mushu/internal/logging"
 )
+
+var ErrNoAuth = errors.New("authentication not successful")
 
 type Config struct {
 	Token   string
@@ -42,10 +45,10 @@ func createGitHubClient(token string, baseURL string) (*github.Client, error) {
 
 func NewClient(ctx context.Context, cfg *Config) (*Client, error) {
 	// Create GitHub client
-	logging.Debug(ctx, "Created GitHub client", "base_url", cfg.BaseURL)
+	slog.DebugContext(ctx, "Created GitHub client", "base_url", cfg.BaseURL)
 	client, err := createGitHubClient(cfg.Token, cfg.BaseURL)
 	if err != nil {
-		logging.Error(ctx, "Failed to create GitHub client", "error", err)
+		slog.ErrorContext(ctx, "Failed to create GitHub client", "error", err)
 
 		return nil, fmt.Errorf("failed to create GitHub client: %w", err)
 	}

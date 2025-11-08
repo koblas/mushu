@@ -3,8 +3,9 @@ package cli
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
+	"log"
+	"log/slog"
 	"os"
 
 	"github.com/koblas/mushu/internal/config"
@@ -13,305 +14,400 @@ import (
 	"github.com/koblas/mushu/internal/policy"
 	"github.com/koblas/mushu/internal/teams"
 	"github.com/koblas/mushu/internal/version"
+	"github.com/urfave/cli/v3"
 )
 
-// Execute runs the CLI application
-func Execute(ctx context.Context) error {
-	// Parse flags first to handle help and global flags
-	fs := flag.NewFlagSet("mushu", flag.ContinueOnError)
+type exitCode int
 
-	// Define global flags
-	fs.String("config", "", "Path to configuration file")
-	fs.String("github-token", "", "GitHub API token")
-	fs.String("github-owner", "", "GitHub repository owner")
-	fs.String("github-repo", "", "GitHub repository name")
-	fs.String("log-level", "", "Log level (debug, info, warn, error)")
-	fs.String("log-format", "", "Log format (json, text)")
+type ErrCmdUsage struct {
+	err error
+	cmd *cli.Command
+}
 
-	// Set custom usage function
-	fs.Usage = func() {
-		fmt.Println("Mushu - Pull request constraint system")
-		fmt.Println("Mushu applies Starlark policy rules to determine if pull requests can be approved")
-		fmt.Println()
-		fmt.Println("Usage:")
-		fmt.Println("  mushu [global-flags] <command> [arguments]")
-		fmt.Println()
-		fmt.Println("Global Flags:")
-		fs.PrintDefaults()
-		fmt.Println()
-		fmt.Println("Commands:")
-		fmt.Println("  validate <pr-number>    Validate a pull request against configured policies and rules")
-		fmt.Println("  list <policies|teams>   List available policies or teams")
-		fmt.Println("  generate policy         Generate Starlark policy from YAML rules")
-		fmt.Println("  version                 Show version information")
-		fmt.Println("  help                    Show this help message")
-		fmt.Println()
-		fmt.Println("Examples:")
-		fmt.Println("  mushu validate 123")
-		fmt.Println("  mushu -github-token=token123 validate 123")
-		fmt.Println("  mushu list policies")
-		fmt.Println("  mushu list teams")
-		fmt.Println("  mushu generate policy")
-	}
+func (e *ErrCmdUsage) Error() string {
+	return fmt.Sprintf("command usage error: %s", e.err.Error())
+}
 
-	// Parse flags
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		if err == flag.ErrHelp {
-			// Help was requested, usage was already printed
-			os.Exit(0)
-		}
-		return fmt.Errorf("failed to parse flags: %w", err)
-	}
+const (
+	exitOK    exitCode = 0
+	exitError exitCode = 1
+	// exitCancel  exitCode = 2
+	exitAuth exitCode = 4
+	// exitPending exitCode = 8
+)
 
-	// Load config with command line flags (highest priority)
-	cfg, err := config.Load(ctx, "", fs)
+func Main() exitCode {
+	ctx := context.Background()
+
+	// Load initial config for logging setup
+	cfg, err := config.Load(ctx, "config.yaml", nil)
 	if err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Create logger and add to context
+	logger := logging.New(cfg.Logging.Level, cfg.Logging.Format)
+	slog.SetDefault(logger)
+
+	// Get version information once
+	versionInfo := version.Get()
+	slog.DebugContext(ctx, "Starting mushu",
+		"version", versionInfo.Version,
+		"commit", versionInfo.Commit,
+		"build_time", versionInfo.BuildTime,
+		"go_version", versionInfo.GoVersion,
+		"log_level", cfg.Logging.Level,
+		"log_format", cfg.Logging.Format)
+
+	if err := Execute(ctx, os.Args); err != nil {
+		if uerr := new(ErrCmdUsage); errors.As(err, &uerr) {
+			fmt.Printf("Error: %s\n\n", uerr.err.Error())
+			_ = cli.ShowSubcommandHelp(uerr.cmd)
+
+			return exitError
+		}
+
+		slog.ErrorContext(ctx, "Application error", "error", err)
+
+		if errors.Is(err, github.ErrNoAuth) {
+			return exitAuth
+		}
+
+		return exitError
+	}
+
+	slog.DebugContext(ctx, "Application completed successfully")
+
+	return exitOK
+}
+
+// Execute runs the CLI application using urfave/cli
+func Execute(ctx context.Context, args []string) error {
+	app := &cli.Command{
+		Name:        "mushu",
+		Usage:       "Pull request constraint system",
+		Description: "Mushu applies Starlark policy rules to determine if pull requests can be approved",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "config",
+				Usage: "Path to configuration file",
+			},
+			&cli.StringFlag{
+				Name:  "github-token",
+				Usage: "GitHub API token",
+			},
+			&cli.StringFlag{
+				Name:  "github-owner",
+				Usage: "GitHub repository owner",
+			},
+			&cli.StringFlag{
+				Name:  "github-repo",
+				Usage: "GitHub repository name",
+			},
+			&cli.StringFlag{
+				Name:  "log-level",
+				Usage: "Log level (debug, info, warn, error)",
+			},
+			&cli.StringFlag{
+				Name:  "log-format",
+				Usage: "Log format (json, text)",
+			},
+		},
+		Commands: []*cli.Command{
+			validateCommand(),
+			listCommand(),
+			generateCommand(),
+			versionCommand(),
+		},
+	}
+
+	return app.Run(ctx, args)
+}
+
+func usageErrorHandler(ctx context.Context, cmd *cli.Command, err error, isSubcommand bool) error {
+	return &ErrCmdUsage{err: err, cmd: cmd}
+}
+
+// loadConfigWithFlags loads config with values from CLI flags
+func loadConfigWithFlags(ctx context.Context, cmd *cli.Command) (context.Context, *config.Config, error) {
+	// Create a simple flag set to pass to config.Load
+	// Since urfave/cli doesn't use flag.FlagSet, we need to create one
+	// and populate it with values from the cli context
+
+	// For now, load the basic config and override with CLI flags
+	cfg, err := config.Load(ctx, cmd.String("config"), nil)
+	if err != nil {
+		return ctx, nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	// Override with CLI flags if provided
+	if token := cmd.String("github-token"); token != "" {
+		cfg.GitHub.Token = token
+	}
+	if owner := cmd.String("github-owner"); owner != "" {
+		cfg.GitHub.Owner = owner
+	}
+	if repo := cmd.String("github-repo"); repo != "" {
+		cfg.GitHub.Repo = repo
+	}
+	if logLevel := cmd.String("log-level"); logLevel != "" {
+		cfg.Logging.Level = logLevel
+	}
+	if logFormat := cmd.String("log-format"); logFormat != "" {
+		cfg.Logging.Format = logFormat
 	}
 
 	// Re-initialize logging with final config values
 	newLogger := logging.New(cfg.Logging.Level, cfg.Logging.Format)
-	ctx = logging.WithLogger(ctx, newLogger)
+	slog.SetDefault(newLogger)
 
-	// Get remaining arguments (command and its args)
-	args := fs.Args()
-	if len(args) < 1 {
-		return fmt.Errorf("no command specified. Use 'mushu -h' for usage information")
-	}
+	return ctx, cfg, nil
+}
 
-	command := args[0]
-	commandArgs := args[1:]
+// validateCommand returns the validate command
+func validateCommand() *cli.Command {
+	return &cli.Command{
+		Name:        "validate",
+		Usage:       "Validate a pull request against configured policies and rules",
+		Description: "Validates a pull request number against the configured policies",
+		ArgsUsage:   "<pr-number>",
+		Arguments: []cli.Argument{
+			&cli.IntArg{
+				Name:      "pr-number",
+				UsageText: "Pull request number to validate",
+			},
+		},
+		OnUsageError: usageErrorHandler,
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			// args := cmd.Args()
+			// if args.Len() < 1 {
+			// 	return fmt.Errorf("validate command requires a PR number")
+			// }
 
-	switch command {
-	case "validate":
-		return runValidateCommand(ctx, cfg, commandArgs)
-	case "list":
-		return runListCommand(ctx, cfg, commandArgs)
-	case "generate":
-		return runGenerateCommand(ctx, cfg, commandArgs)
-	case "version":
-		return runVersionCommand(ctx, cfg, commandArgs)
-	case "help":
-		// Help is handled by the flag package's Usage function
-		return fmt.Errorf("use 'mushu -h' for help")
-	default:
-		return fmt.Errorf("unknown command: %s. Use 'mushu -h' for usage information", command)
+			// Load config with CLI flags
+			ctx, cfg, err := loadConfigWithFlags(ctx, cmd)
+			if err != nil {
+				return err
+			}
+
+			prNumber := cmd.IntArg("pr-number")
+			if prNumber == 0 {
+				return fmt.Errorf("validate command requires a PR number argument")
+			}
+
+			ctx = logging.ContextWith(ctx, slog.Int("pr_number", prNumber))
+
+			client, err := github.NewClient(ctx, &github.Config{
+				Token:   cfg.GitHub.Token,
+				BaseURL: cfg.GitHub.BaseURL,
+				Owner:   cfg.GitHub.Owner,
+				Repo:    cfg.GitHub.Repo,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create GitHub client: %w", err)
+			}
+
+			// Create team service
+			yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
+			// Load teams (optional - only fail on real errors, not missing files)
+			if err := yamlService.Load(ctx); err != nil && !errors.Is(err, os.ErrNotExist) {
+				slog.ErrorContext(ctx, "Failed to load teams from YAML", "error", err)
+				return fmt.Errorf("failed to load teams: %w", err)
+			}
+
+			var teamService teams.TeamService = yamlService
+
+			// Create policy engine
+			policyEngine := policy.NewPolicyEngine(teamService, cfg.Policy.RulesFile)
+			slog.DebugContext(ctx, "Created policy engine", "rules_file", cfg.Policy.RulesFile)
+
+			data, err := client.GetPRData(ctx, prNumber, teamService)
+			if err != nil {
+				return fmt.Errorf("failed to get PR data: %w", err)
+			}
+
+			// Validate PR
+			slog.InfoContext(ctx, "Validating PR")
+			result, err := policyEngine.EvaluatePR(ctx, data)
+			if err != nil {
+				slog.ErrorContext(ctx, "PR validation failed", logging.Err(err))
+				return fmt.Errorf("failed to validate PR: %w", err)
+			}
+
+			// Log validation result
+			slog.InfoContext(ctx, "PR validation completed",
+				"decision", result.Decision,
+				"violations_count", len(result.Violations),
+				"approval_requirements_count", len(result.ApprovalRequirements))
+
+			// Print result to stdout for user
+			if result.Reason != "" {
+				fmt.Printf("Reason: %s\n", result.Reason)
+			}
+			if len(result.Violations) > 0 {
+				fmt.Println("Violations:")
+				for _, violation := range result.Violations {
+					fmt.Printf("  - %s\n", violation)
+					slog.InfoContext(ctx, "Constraint violation", slog.String("violation", violation))
+				}
+			}
+			if len(result.ApprovalRequirements) > 0 {
+				fmt.Println("Approval Requirements:")
+				for team, count := range result.ApprovalRequirements {
+					fmt.Printf("  - %s: %d approval(s)\n", team, count)
+					slog.InfoContext(ctx, "Approval requirement",
+						slog.String("team", team),
+						slog.Int("count", count),
+					)
+				}
+			}
+
+			// Exit with error code if validation failed
+			if result.Decision == "deny" {
+				slog.InfoContext(ctx, "PR validation denied")
+				os.Exit(1)
+			}
+
+			slog.InfoContext(ctx, "PR validation approved")
+			return nil
+		},
 	}
 }
 
-// runValidateCommand handles the validate command
-func runValidateCommand(ctx context.Context, cfg *config.Config, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("validate command requires a PR number")
-	}
+// listCommand returns the list command
+func listCommand() *cli.Command {
+	return &cli.Command{
+		Name:        "list",
+		Usage:       "List available policies or teams",
+		Description: "Lists available resources (policies or teams)",
+		Commands: []*cli.Command{
+			{
+				Name:  "policies",
+				Usage: "List available policies",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					ctx, cfg, err := loadConfigWithFlags(ctx, cmd)
+					if err != nil {
+						return err
+					}
 
-	prStr := args[0]
-	return runValidate(ctx, cfg, prStr)
-}
+					slog.InfoContext(ctx, "Listing available policies")
 
-// runListCommand handles the list command
-func runListCommand(ctx context.Context, cfg *config.Config, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("list command requires a resource type (policies or teams)")
-	}
+					fmt.Println("Available policies:")
 
-	resource := args[0]
-	return runList(ctx, cfg, resource)
-}
+					// List Starlark policy files
+					if len(cfg.Policy.PolicyFiles) > 0 {
+						fmt.Println("Starlark policies:")
+						for _, file := range cfg.Policy.PolicyFiles {
+							fmt.Printf("  - %s\n", file)
+							slog.DebugContext(ctx, "Found policy file", "file", file)
+						}
+					}
 
-// runVersionCommand handles the version command
-func runVersionCommand(ctx context.Context, _ *config.Config, _ []string) error {
-	logging.Info(ctx, "Version command executed")
+					// List rules files
+					fmt.Println("Rules files:")
+					fmt.Printf("  - %s\n", cfg.Policy.RulesFile)
+					slog.DebugContext(ctx, "Found rules file", "file", cfg.Policy.RulesFile)
 
-	info := version.Get()
+					return nil
+				},
+			},
+			{
+				Name:  "teams",
+				Usage: "List available teams",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					ctx, cfg, err := loadConfigWithFlags(ctx, cmd)
+					if err != nil {
+						return err
+					}
 
-	// Print version information
-	fmt.Printf("mushu version %s\n", info.Version)
-	fmt.Printf("  commit: %s\n", info.Commit)
-	fmt.Printf("  built: %s\n", info.BuildTime)
-	fmt.Printf("  go: %s\n", info.GoVersion)
+					slog.InfoContext(ctx, "Listing available teams")
 
-	return nil
-}
-func runGenerateCommand(ctx context.Context, cfg *config.Config, args []string) error {
-	// Parse flags for generate command
-	fs := flag.NewFlagSet("generate", flag.ExitOnError)
-	rulesFile := fs.String("rules", cfg.Policy.RulesFile, "Rules file to process")
-	outputFile := fs.String("output", "", "Output file (default: stdout)")
+					// Load teams from YAML (optional - only fail on real errors, not missing files)
+					yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
+					if err := yamlService.Load(ctx); err != nil {
+						slog.ErrorContext(ctx, "Failed to load teams from YAML", "error", err)
+						return fmt.Errorf("failed to load teams: %w", err)
+					}
 
-	if err := fs.Parse(args); err != nil {
-		logging.Error(ctx, "Failed to parse generate command flags", "error", err)
-		return fmt.Errorf("failed to parse flags: %w", err)
-	}
+					// List teams (this would need to be implemented in the team service)
+					slog.DebugContext(ctx, "Teams loaded successfully", "teams_file", cfg.Teams.TeamsFile, "teams_dir", cfg.Teams.TeamsDir)
 
-	logging.Info(ctx, "Generate command executed", "rules_file", *rulesFile, "output_file", *outputFile)
+					fmt.Println("Available teams:")
 
-	// For now, just print the parameters
-	fmt.Printf("Generate policy from rules file: %s\n", *rulesFile)
-	if *outputFile != "" {
-		fmt.Printf("Output to file: %s\n", *outputFile)
-	} else {
-		fmt.Println("Output to stdout")
-	}
-
-	return runGenerate(ctx, cfg)
-}
-
-// runValidate validates a pull request
-func runValidate(ctx context.Context, cfg *config.Config, prStr string) error {
-	logging.Info(ctx, "Starting PR validation", "pr", prStr)
-
-	// Parse PR number
-	prNumber, err := github.ParsePRNumber(prStr)
-	if err != nil {
-		logging.Error(ctx, "Invalid PR number", "pr", prStr, "error", err)
-		return fmt.Errorf("invalid PR number: %w", err)
-	}
-
-	logging.Debug(ctx, "Parsed PR number", "pr_number", prNumber)
-
-	client, err := github.NewClient(ctx, &github.Config{
-		Token:   cfg.GitHub.Token,
-		BaseURL: cfg.GitHub.BaseURL,
-		Owner:   cfg.GitHub.Owner,
-		Repo:    cfg.GitHub.Repo,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create GitHub client: %w", err)
-	}
-
-	// Create team service
-	yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
-	// Load teams (optional - only fail on real errors, not missing files)
-	if err := yamlService.Load(ctx); err != nil && !errors.Is(err, os.ErrNotExist) {
-		logging.Error(ctx, "Failed to load teams from YAML", "error", err)
-		return fmt.Errorf("failed to load teams: %w", err)
-	}
-
-	var teamService teams.TeamService = yamlService
-	// if cfg.Teams.UseGitHubAPI {
-	// 	logging.Debug(ctx, "Using GitHub API for team management")
-	// 	githubTeamService := teams.NewGitHubTeamService(client, cfg.GitHub.Owner, cfg.GitHub.Repo)
-	// 	teamService = teams.NewCompositeTeamService(yamlService, githubTeamService, true)
-	// } else {
-	// 	logging.Debug(ctx, "Using YAML-only team management")
-	// }
-
-	// Create policy engine
-	policyEngine := policy.NewPolicyEngine(teamService, cfg.Policy.RulesFile)
-	logging.Debug(ctx, "Created policy engine", "rules_file", cfg.Policy.RulesFile)
-
-	data, err := client.GetPRData(ctx, prNumber, teamService)
-	if err != nil {
-		return fmt.Errorf("failed to get PR data: %w", err)
-	}
-
-	// Validate PR
-	logging.Info(ctx, "Validating PR", "pr_number", prNumber)
-	result, err := policyEngine.EvaluatePR(ctx, data)
-	if err != nil {
-		logging.Error(ctx, "PR validation failed", "pr_number", prNumber, "error", err)
-		return fmt.Errorf("failed to validate PR: %w", err)
-	}
-
-	// Log validation result
-	logging.Info(ctx, "PR validation completed",
-		"pr_number", prNumber,
-		"decision", result.Decision,
-		"violations_count", len(result.Violations),
-		"approval_requirements_count", len(result.ApprovalRequirements))
-
-	// Print result to stdout for user
-	fmt.Printf("PR #%d validation result: %s\n", prNumber, result.Decision)
-	if result.Reason != "" {
-		fmt.Printf("Reason: %s\n", result.Reason)
-	}
-	if len(result.Violations) > 0 {
-		fmt.Println("Violations:")
-		for _, violation := range result.Violations {
-			fmt.Printf("  - %s\n", violation)
-			logging.Warn(ctx, "Constraint violation", "pr_number", prNumber, "violation", violation)
-		}
-	}
-	if len(result.ApprovalRequirements) > 0 {
-		fmt.Println("Approval Requirements:")
-		for team, count := range result.ApprovalRequirements {
-			fmt.Printf("  - %s: %d approval(s)\n", team, count)
-			logging.Info(ctx, "Approval requirement", "pr_number", prNumber, "team", team, "count", count)
-		}
-	}
-
-	// Exit with error code if validation failed
-	if result.Decision == "deny" {
-		logging.Warn(ctx, "PR validation denied", "pr_number", prNumber)
-		os.Exit(1)
-	}
-
-	logging.Info(ctx, "PR validation approved", "pr_number", prNumber)
-	return nil
-}
-
-// runList lists available policies or teams
-func runList(ctx context.Context, cfg *config.Config, resource string) error {
-	switch resource {
-	case "policies":
-		return listPolicies(ctx, cfg)
-	case "teams":
-		return listTeams(ctx, cfg)
-	default:
-		return fmt.Errorf("unknown resource: %s (supported: policies, teams)", resource)
+					return nil
+				},
+			},
+		},
 	}
 }
 
-// listPolicies lists available policies
-func listPolicies(ctx context.Context, cfg *config.Config) error {
-	logging.Info(ctx, "Listing available policies")
+// generateCommand returns the generate command
+func generateCommand() *cli.Command {
+	return &cli.Command{
+		Name:        "generate",
+		Usage:       "Generate Starlark policy from YAML rules",
+		Description: "Generates Starlark policy code from YAML rules configuration",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "rules",
+				Usage: "Rules file to process",
+			},
+			&cli.StringFlag{
+				Name:  "output",
+				Usage: "Output file (default: stdout)",
+			},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			ctx, cfg, err := loadConfigWithFlags(ctx, cmd)
+			if err != nil {
+				return err
+			}
 
-	fmt.Println("Available policies:")
+			rulesFile := cmd.String("rules")
+			if rulesFile == "" {
+				rulesFile = cfg.Policy.RulesFile
+			}
+			outputFile := cmd.String("output")
 
-	// List Starlark policy files
-	if len(cfg.Policy.PolicyFiles) > 0 {
-		fmt.Println("Starlark policies:")
-		for _, file := range cfg.Policy.PolicyFiles {
-			fmt.Printf("  - %s\n", file)
-			logging.Debug(ctx, "Found policy file", "file", file)
-		}
+			slog.InfoContext(ctx, "Generate command executed", "rules_file", rulesFile, "output_file", outputFile)
+
+			// For now, just print the parameters
+			fmt.Printf("Generate policy from rules file: %s\n", rulesFile)
+			if outputFile != "" {
+				fmt.Printf("Output to file: %s\n", outputFile)
+			} else {
+				fmt.Println("Output to stdout")
+			}
+
+			slog.InfoContext(ctx, "Policy generation requested")
+
+			fmt.Println("Policy generation not yet implemented")
+			fmt.Println("This would generate Starlark code from mushu.yaml rules")
+
+			slog.WarnContext(ctx, "Policy generation not implemented", "rules_file", cfg.Policy.RulesFile)
+			return nil
+		},
 	}
-
-	// List rules files
-	fmt.Println("Rules files:")
-	fmt.Printf("  - %s\n", cfg.Policy.RulesFile)
-	logging.Debug(ctx, "Found rules file", "file", cfg.Policy.RulesFile)
-
-	return nil
 }
 
-// listTeams lists available teams
-func listTeams(ctx context.Context, cfg *config.Config) error {
-	logging.Info(ctx, "Listing available teams")
+// versionCommand returns the version command
+func versionCommand() *cli.Command {
+	return &cli.Command{
+		Name:        "version",
+		Usage:       "Show version information",
+		Description: "Displays version, commit, build time, and Go version information",
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			slog.InfoContext(ctx, "Version command executed")
 
-	// Load teams from YAML (optional - only fail on real errors, not missing files)
-	yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
-	if err := yamlService.Load(ctx); err != nil {
-		logging.Error(ctx, "Failed to load teams from YAML", "error", err)
-		return fmt.Errorf("failed to load teams: %w", err)
+			info := version.Get()
+
+			// Print version information
+			fmt.Printf("mushu version %s\n", info.Version)
+			fmt.Printf("  commit: %s\n", info.Commit)
+			fmt.Printf("  built: %s\n", info.BuildTime)
+			fmt.Printf("  go: %s\n", info.GoVersion)
+
+			return nil
+		},
 	}
-
-	// List teams (this would need to be implemented in the team service)
-	logging.Debug(ctx, "Teams loaded successfully", "teams_file", cfg.Teams.TeamsFile, "teams_dir", cfg.Teams.TeamsDir)
-
-	fmt.Println("Available teams:")
-
-	return nil
-}
-
-// runGenerate generates Starlark policy from rules
-func runGenerate(ctx context.Context, cfg *config.Config) error {
-	logging.Info(ctx, "Policy generation requested")
-
-	fmt.Println("Policy generation not yet implemented")
-	fmt.Println("This would generate Starlark code from mushu.yaml rules")
-
-	logging.Warn(ctx, "Policy generation not implemented", "rules_file", cfg.Policy.RulesFile)
-	return nil
 }

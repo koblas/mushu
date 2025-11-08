@@ -135,7 +135,7 @@ teams:
 			teamsFile: "nonexistent.yaml",
 			teamsDir:  "",
 			wantTeams: map[string]Team{},
-			wantError: true, // Load returns the error, but CLI should handle it
+			wantError: false,
 		},
 		{
 			name:      "missing teams directory - should not error",
@@ -143,7 +143,7 @@ teams:
 			teamsFile: "",
 			teamsDir:  "nonexistent",
 			wantTeams: map[string]Team{},
-			wantError: true, // Load returns the error, but CLI should handle it
+			wantError: false,
 		},
 		{
 			name: "malformed YAML - should error",
@@ -188,7 +188,7 @@ teams:
 		t.Run(tt.name, func(t *testing.T) {
 			service := NewYAMLTeamService(tt.fsys, tt.teamsFile, tt.teamsDir)
 
-			err := service.Load(context.Background())
+			err := service.Load(t.Context())
 
 			if tt.wantError {
 				require.Error(t, err)

@@ -6,42 +6,58 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+
+	"github.com/telemachus/humane"
 )
 
-// contextKey is the key used to store the logger in context
-type contextKey struct{}
-
-// Logger is the logger interface
-type Logger interface {
-	Debug(msg string, args ...any)
-	Info(msg string, args ...any)
-	Warn(msg string, args ...any)
-	Error(msg string, args ...any)
-	With(args ...any) Logger
+type ContextHandler struct {
+	next slog.Handler
 }
 
-// slogLogger wraps slog.Logger to implement our Logger interface
-type slogLogger struct {
-	*slog.Logger
+type fieldsKey struct{}
+
+func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
+	if attrs, ok := ctx.Value(fieldsKey{}).([]slog.Attr); ok {
+		for _, v := range attrs {
+			r.AddAttrs(v)
+		}
+	}
+
+	return h.next.Handle(ctx, r)
 }
 
-// With returns a logger with the given attributes
-func (l *slogLogger) With(args ...any) Logger {
-	return &slogLogger{Logger: l.Logger.With(args...)}
+func (h *ContextHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
+	return h.next.Enabled(ctx, lvl)
+}
+
+func (h *ContextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return h.next.WithAttrs(attrs)
+}
+
+func (h *ContextHandler) WithGroup(name string) slog.Handler {
+	return h.next.WithGroup(name)
+}
+
+func ContextWith(ctx context.Context, attr ...slog.Attr) context.Context {
+	if v, ok := ctx.Value(fieldsKey{}).([]slog.Attr); ok {
+		return context.WithValue(ctx, fieldsKey{}, append(v, attr...))
+	}
+
+	return context.WithValue(ctx, fieldsKey{}, attr[:])
 }
 
 // New creates a new logger with the specified level and format
-func New(level, format string) Logger {
+func New(level, format string) *slog.Logger {
 	return newLogger(level, format, os.Stdout)
 }
 
 // NewWithWriter creates a new logger with a custom writer
-func NewWithWriter(level, format string, writer io.Writer) Logger {
+func NewWithWriter(level, format string, writer io.Writer) *slog.Logger {
 	return newLogger(level, format, writer)
 }
 
 // newLogger creates a new logger instance
-func newLogger(level, format string, writer io.Writer) Logger {
+func newLogger(level, format string, writer io.Writer) *slog.Logger {
 	var logLevel slog.Level
 	switch strings.ToLower(level) {
 	case "debug":
@@ -62,6 +78,19 @@ func newLogger(level, format string, writer io.Writer) Logger {
 		handler = slog.NewJSONHandler(writer, &slog.HandlerOptions{
 			Level: logLevel,
 		})
+	case "console":
+		removeTime := func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				// Since slog does not show empty attributes, this removes the time.
+				return slog.Attr{}
+			}
+			return a
+		}
+
+		handler = humane.NewHandler(writer, &humane.Options{
+			Level:       logLevel,
+			ReplaceAttr: removeTime,
+		})
 	case "text":
 		handler = slog.NewTextHandler(writer, &slog.HandlerOptions{
 			Level: logLevel,
@@ -73,44 +102,22 @@ func newLogger(level, format string, writer io.Writer) Logger {
 		})
 	}
 
-	return &slogLogger{Logger: slog.New(handler)}
+	return slog.New(&ContextHandler{next: handler})
 }
 
+type loggerKey struct{}
+
 // WithLogger adds a logger to the context
-func WithLogger(ctx context.Context, logger Logger) context.Context {
-	return context.WithValue(ctx, contextKey{}, logger)
+func WithLogger(ctx context.Context, logger *slog.Logger) context.Context {
+	return context.WithValue(ctx, loggerKey{}, logger)
 }
 
 // FromContext retrieves the logger from context, or returns a default logger
-func FromContext(ctx context.Context) Logger {
-	if logger, ok := ctx.Value(contextKey{}).(Logger); ok {
+func FromContext(ctx context.Context) *slog.Logger {
+	if logger, ok := ctx.Value(loggerKey{}).(*slog.Logger); ok {
 		return logger
 	}
+
 	// Return a default logger if none is found in context
-	return New("info", "text")
-}
-
-// Debug logs a debug message using the logger from context
-func Debug(ctx context.Context, msg string, args ...any) {
-	FromContext(ctx).Debug(msg, args...)
-}
-
-// Info logs an info message using the logger from context
-func Info(ctx context.Context, msg string, args ...any) {
-	FromContext(ctx).Info(msg, args...)
-}
-
-// Warn logs a warning message using the logger from context
-func Warn(ctx context.Context, msg string, args ...any) {
-	FromContext(ctx).Warn(msg, args...)
-}
-
-// Error logs an error message using the logger from context
-func Error(ctx context.Context, msg string, args ...any) {
-	FromContext(ctx).Error(msg, args...)
-}
-
-// With returns a logger with the given attributes from context
-func With(ctx context.Context, args ...any) Logger {
-	return FromContext(ctx).With(args...)
+	return slog.Default()
 }

@@ -19,4 +19,4 @@ policy:
 
 logging:
   level: "info"
-  format: "text"
+  format: "console"

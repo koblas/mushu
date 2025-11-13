@@ -1,42 +1,48 @@
 # mushu.yaml - Root-level rules (inherited by all subdirectories)
 rules:
-  - name: "security-review"
-    path: "**"
-    conditions:
-      - type: "sensitive-file"
-        patterns: [".env", "secrets", "password", "key"]
-        require_teams: ["security-team"]
-        approvers:
-          security-team: 1
+  - name: "semantic-title"
+    args:
+      # pattern: "^(feat|fix|docs|style|refactor|perf|test|chore)(\\(.+\\))?: .{10,50}$"
+      # pattern: "fizze"
+    # message: "Commit title must follow conventional commits format and be between 10 and 50 characters."
 
-      - type: "auth-file"
-        patterns: ["auth", "login", "permission", "rbac"]
-        require_teams: ["security-team"]
-        approvers:
-          security-team: 1
+  # - name: "security-review"
+  #   path: "**"
+  #   conditions:
+  #     - type: "sensitive-file"
+  #       patterns: [".env", "secrets", "password", "key"]
+  #       require_teams: ["security-team"]
+  #       approvers:
+  #         security-team: 1
 
-  - name: "large-changes"
-    path: "**"
-    conditions:
-      - type: "file-change"
-        max_changes: 500
-        require_teams: ["senior-backend", "platform-team"]
-        approvers:
-          senior-backend: 1
-          platform-team: 1
+  #     - type: "auth-file"
+  #       patterns: ["auth", "login", "permission", "rbac"]
+  #       require_teams: ["security-team"]
+  #       approvers:
+  #         security-team: 1
 
-  - name: "infrastructure"
-    path: "infra/**"
-    conditions:
-      - type: "file-change"
-        patterns: ["*.tf", "*.yaml", "*.yml"]
-        require_teams: ["platform-team"]
-        approvers:
-          platform-team: 2
+  # - name: "large-changes"
+  #   path: "**"
+  #   conditions:
+  #     - type: "file-change"
+  #       max_changes: 500
+  #       require_teams: ["senior-backend", "platform-team"]
+  #       approvers:
+  #         senior-backend: 1
+  #         platform-team: 1
 
-  - name: "binary-files"
-    path: "**"
-    conditions:
-      - type: "binary-file"
-        extensions: [".exe", ".dll", ".so", ".bin"]
-        action: "forbid"
+  # - name: "infrastructure"
+  #   path: "infra/**"
+  #   conditions:
+  #     - type: "file-change"
+  #       patterns: ["*.tf", "*.yaml", "*.yml"]
+  #       require_teams: ["platform-team"]
+  #       approvers:
+  #         platform-team: 2
+
+  # - name: "binary-files"
+  #   path: "**"
+  #   conditions:
+  #     - type: "binary-file"
+  #       extensions: [".exe", ".dll", ".so", ".bin"]
+  #       action: "forbid"

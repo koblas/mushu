@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/telemachus/humane"
+	"gitlab.com/greyxor/slogor"
 )
 
 type ContextHandler struct {
@@ -79,18 +79,12 @@ func newLogger(level, format string, writer io.Writer) *slog.Logger {
 			Level: logLevel,
 		})
 	case "console":
-		removeTime := func(_ []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				// Since slog does not show empty attributes, this removes the time.
-				return slog.Attr{}
-			}
-			return a
-		}
+		handler = slogor.NewHandler(
+			writer,
+			slogor.SetLevel(logLevel),
+			slogor.SetTimeFormat("[15:04:05]"),
+		)
 
-		handler = humane.NewHandler(writer, &humane.Options{
-			Level:       logLevel,
-			ReplaceAttr: removeTime,
-		})
 	case "text":
 		handler = slog.NewTextHandler(writer, &slog.HandlerOptions{
 			Level: logLevel,

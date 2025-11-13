@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/koblas/mushu/internal/config"
 	"github.com/koblas/mushu/internal/github"
@@ -221,54 +222,68 @@ func validateCommand() *cli.Command {
 			policyEngine := policy.NewPolicyEngine(teamService, cfg.Policy.RulesFile)
 			slog.DebugContext(ctx, "Created policy engine", "rules_file", cfg.Policy.RulesFile)
 
+			tstart := time.Now()
 			data, err := client.GetPRData(ctx, prNumber, teamService)
 			if err != nil {
 				return fmt.Errorf("failed to get PR data: %w", err)
 			}
+			slog.DebugContext(ctx, "Fetched PR data", "took", time.Since(tstart))
 
 			// Validate PR
 			slog.InfoContext(ctx, "Validating PR")
 			result, err := policyEngine.EvaluatePR(ctx, data)
 			if err != nil {
 				slog.ErrorContext(ctx, "PR validation failed", logging.Err(err))
+
 				return fmt.Errorf("failed to validate PR: %w", err)
 			}
 
-			// Log validation result
-			slog.InfoContext(ctx, "PR validation completed",
-				"decision", result.Decision,
-				"violations_count", len(result.Violations),
-				"approval_requirements_count", len(result.ApprovalRequirements))
-
-			// Print result to stdout for user
-			if result.Reason != "" {
-				fmt.Printf("Reason: %s\n", result.Reason)
-			}
-			if len(result.Violations) > 0 {
-				fmt.Println("Violations:")
-				for _, violation := range result.Violations {
-					fmt.Printf("  - %s\n", violation)
-					slog.InfoContext(ctx, "Constraint violation", slog.String("violation", violation))
-				}
-			}
-			if len(result.ApprovalRequirements) > 0 {
-				fmt.Println("Approval Requirements:")
-				for team, count := range result.ApprovalRequirements {
-					fmt.Printf("  - %s: %d approval(s)\n", team, count)
-					slog.InfoContext(ctx, "Approval requirement",
-						slog.String("team", team),
-						slog.Int("count", count),
-					)
-				}
+			for _, result := range result {
+				slog.InfoContext(ctx,
+					"evaluation result",
+					slog.String("rule_name", result.Rule.Name),
+					slog.String("decision", result.Decision),
+					slog.String("reason", result.Reason),
+					slog.Int("violations_count", len(result.Violations)),
+					slog.Int("approval_requirements_count", len(result.ApprovalRequirements)),
+				)
 			}
 
-			// Exit with error code if validation failed
-			if result.Decision == "deny" {
-				slog.InfoContext(ctx, "PR validation denied")
-				os.Exit(1)
-			}
+			// // Log validation result
+			// slog.InfoContext(ctx, "PR validation completed",
+			// 	"decision", result.Decision,
+			// 	"violations_count", len(result.Violations),
+			// 	"approval_requirements_count", len(result.ApprovalRequirements))
 
-			slog.InfoContext(ctx, "PR validation approved")
+			// // Print result to stdout for user
+			// if result.Reason != "" {
+			// 	fmt.Printf("Reason: %s\n", result.Reason)
+			// }
+			// if len(result.Violations) > 0 {
+			// 	fmt.Println("Violations:")
+			// 	for _, violation := range result.Violations {
+			// 		fmt.Printf("  - %s\n", violation)
+			// 		slog.InfoContext(ctx, "Constraint violation", slog.String("violation", violation))
+			// 	}
+			// }
+			// if len(result.ApprovalRequirements) > 0 {
+			// 	fmt.Println("Approval Requirements:")
+			// 	for team, count := range result.ApprovalRequirements {
+			// 		fmt.Printf("  - %s: %d approval(s)\n", team, count)
+			// 		slog.InfoContext(ctx, "Approval requirement",
+			// 			slog.String("team", team),
+			// 			slog.Int("count", count),
+			// 		)
+			// 	}
+			// }
+
+			// // Exit with error code if validation failed
+			// if result.Decision == "deny" {
+			// 	slog.InfoContext(ctx, "PR validation denied")
+			// 	os.Exit(1)
+			// }
+
+			// slog.InfoContext(ctx, "PR validation approved")
 			return nil
 		},
 	}

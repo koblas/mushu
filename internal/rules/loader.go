@@ -277,7 +277,7 @@ func (r *Rule) MatchFiles(ctx context.Context, files []string) (bool, error) {
 		for _, filePath := range files {
 			if match, err := doublestar.Match(pattern, filePath); err != nil {
 				return false, fmt.Errorf("error matching exclude pattern %q: %w", pattern, err)
-			} else if !match {
+			} else if match {
 				delete(matches, filePath)
 			}
 		}

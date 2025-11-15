@@ -84,7 +84,10 @@ func TestFindCodeRulesForPR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			finder := rules.NewPrRuleLoader(tt.prFiles, rules.WithFileSystem(fsys))
+			finder := rules.NewPrRuleLoader(tt.prFiles,
+				rules.WithFileSystem(fsys),
+				rules.WithFilename("CODERULES"),
+			)
 
 			loaded, err := finder.LoadRules(t.Context())
 			if err != nil {
@@ -154,120 +157,3 @@ func TestExtractDirectories(t *testing.T) {
 		})
 	}
 }
-
-// func TestParseCodeRulesFile(t *testing.T) {
-// 	finder := rules.NewCodeRulesFinder()
-
-// 	validRules := []byte(`rules:
-//   - name: test-rule
-//     path: "src/**"
-//     conditions:
-//       - type: sensitive-file
-//         patterns: [".env", ".key"]
-// `)
-
-// 	rules, err := finder.parseCodeRulesFile(validRules)
-// 	if err != nil {
-// 		t.Fatalf("failed to parse valid rules: %v", err)
-// 	}
-
-// 	if len(rules) != 1 {
-// 		t.Errorf("expected 1 rule, got %d", len(rules))
-// 	}
-
-// 	if rules[0].Name != "test-rule" {
-// 		t.Errorf("expected rule name 'test-rule', got '%s'", rules[0].Name)
-// 	}
-
-// 	if rules[0].Path != "src/**" {
-// 		t.Errorf("expected rule path 'src/**', got '%s'", rules[0].Path)
-// 	}
-
-// 	if len(rules[0].Conditions) != 1 {
-// 		t.Errorf("expected 1 condition, got %d", len(rules[0].Conditions))
-// 	}
-// }
-
-// func TestParseCodeRulesFile_Invalid(t *testing.T) {
-// 	finder := NewCodeRulesFinder("")
-
-// 	invalidRules := []byte(`invalid yaml [content`)
-
-// 	_, err := finder.parseCodeRulesFile(invalidRules)
-// 	if err == nil {
-// 		t.Error("expected error parsing invalid YAML, got nil")
-// 	}
-// }
-
-// func TestFindCodeRulesInPath(t *testing.T) {
-// 	fsys := fstest.MapFS{
-// 		"CODERULES": &fstest.MapFile{
-// 			Data: []byte(`rules:
-//   - name: root-rule
-//     path: "**"
-// `),
-// 		},
-// 		"src/CODERULES": &fstest.MapFile{
-// 			Data: []byte(`rules:
-//   - name: src-rule
-//     path: "src/**"
-// `),
-// 		},
-// 		"src/api/CODERULES": &fstest.MapFile{
-// 			Data: []byte(`rules:
-//   - name: api-rule
-//     path: "src/api/**"
-// `),
-// 		},
-// 	}
-
-// 	finder := rules.NewCodeRulesFinder(rules.WithFileSystem(fsys))
-
-// 	tests := []struct {
-// 		name          string
-// 		dir           string
-// 		expectedCount int
-// 		expectedPaths []string
-// 	}{
-// 		{
-// 			name:          "api directory",
-// 			dir:           "src/api",
-// 			expectedCount: 3,
-// 			expectedPaths: []string{"src/api/CODERULES", "src/CODERULES", "CODERULES"},
-// 		},
-// 		{
-// 			name:          "src directory",
-// 			dir:           "src",
-// 			expectedCount: 2,
-// 			expectedPaths: []string{"src/CODERULES", "CODERULES"},
-// 		},
-// 		{
-// 			name:          "root directory",
-// 			dir:           "",
-// 			expectedCount: 1,
-// 			expectedPaths: []string{"CODERULES"},
-// 		},
-// 	}
-
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			result, err := finder.findCodeRulesInPath(tt.dir)
-// 			if err != nil {
-// 				t.Fatalf("unexpected error: %v", err)
-// 			}
-
-// 			if len(result) != tt.expectedCount {
-// 				t.Errorf("expected %d CODERULES files, got %d", tt.expectedCount, len(result))
-// 			}
-
-// 			for i, expected := range tt.expectedPaths {
-// 				if i >= len(result) {
-// 					break
-// 				}
-// 				if result[i].Path != expected {
-// 					t.Errorf("expected path %s at index %d, got %s", expected, i, result[i].Path)
-// 				}
-// 			}
-// 		})
-// 	}
-// }

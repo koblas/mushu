@@ -65,3 +65,4 @@ This repository contains `mushu`, a small Go command line tool that provides con
 - Always profile for performance.
 - Write tests and document edge cases.
 - Treat warnings and errors seriously.
+- **Simplicity First** keep the codebase as small and simple as possible.

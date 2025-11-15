@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/google/go-github/v75/github"
-	"github.com/koblas/mushu/internal/policy"
 	"github.com/koblas/mushu/internal/rules"
 	"github.com/koblas/mushu/internal/teams"
 )
@@ -30,7 +29,7 @@ func NewGitHubService(client *github.Client, owner, repo string, teamService tea
 }
 
 // GetPRData fetches pull request data from GitHub
-func (gs *Client) GetPRData(ctx context.Context, prNumber int, lookup teams.Lookup) (*policy.PRData, error) {
+func (gs *Client) GetPRData(ctx context.Context, prNumber int, lookup teams.Lookup) (*PRData, error) {
 	// Get PR details
 	pr, _, err := gs.client.PullRequests.Get(ctx, gs.owner, gs.repo, prNumber)
 	if err != nil {
@@ -55,7 +54,7 @@ func (gs *Client) GetPRData(ctx context.Context, prNumber int, lookup teams.Look
 	}
 
 	// Convert to internal format
-	prData := &policy.PRData{
+	prData := &PRData{
 		Number:       prNumber,
 		Title:        pr.GetTitle(),
 		State:        pr.GetState(),
@@ -100,7 +99,7 @@ func (gs *Client) convertFiles(files []*github.CommitFile) []rules.PRFile {
 }
 
 // convertReviews converts GitHub reviews to internal format
-func (gs *Client) convertReviews(ctx context.Context, reviews []*github.PullRequestReview, lookup teams.Lookup) ([]policy.Review, error) {
+func (gs *Client) convertReviews(ctx context.Context, reviews []*github.PullRequestReview, lookup teams.Lookup) ([]Review, error) {
 	users := map[string]struct{}{}
 	for _, review := range reviews {
 		users[review.GetUser().GetLogin()] = struct{}{}
@@ -116,9 +115,9 @@ func (gs *Client) convertReviews(ctx context.Context, reviews []*github.PullRequ
 		userToTeams[user] = teams
 	}
 
-	var prReviews []policy.Review
+	var prReviews []Review
 	for _, review := range reviews {
-		prReviews = append(prReviews, policy.Review{
+		prReviews = append(prReviews, Review{
 			Reviewer:      review.GetUser().GetLogin(),
 			ReviewerTeams: userToTeams[review.GetUser().GetLogin()],
 			State:         review.GetState(),

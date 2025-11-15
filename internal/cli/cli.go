@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/koblas/mushu/internal/config"
+	"github.com/koblas/mushu/internal/engine"
 	"github.com/koblas/mushu/internal/github"
 	"github.com/koblas/mushu/internal/logging"
-	"github.com/koblas/mushu/internal/policy"
 	"github.com/koblas/mushu/internal/teams"
 	"github.com/koblas/mushu/internal/version"
 	"github.com/urfave/cli/v3"
@@ -219,7 +219,7 @@ func validateCommand() *cli.Command {
 			var teamService teams.TeamService = yamlService
 
 			// Create policy engine
-			policyEngine := policy.NewPolicyEngine(teamService, cfg.Policy.RulesFile)
+			policyEngine := engine.NewPolicyEngine(teamService, cfg.Policy.RulesFile)
 			slog.DebugContext(ctx, "Created policy engine", "rules_file", cfg.Policy.RulesFile)
 
 			tstart := time.Now()

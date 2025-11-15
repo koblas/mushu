@@ -1,5 +1,18 @@
 # mushu.yaml - Root-level rules (inherited by all subdirectories)
 rules:
+  - name: "print"
+    when:
+      branch:
+        target: ["main", "develop"]
+        source: ["feature/*", "bugfix/*"]
+      file:
+        include: ["src/**", "lib/**"]
+        exclude: ["src/experimental/**"]
+      # this includes the author
+      contributor:
+        users: ["alice", "bob"]
+        teams: ["dev-team", "qa-team"]
+
   - name: "semantic-title"
     args:
       # pattern: "^(feat|fix|docs|style|refactor|perf|test|chore)(\\(.+\\))?: .{10,50}$"

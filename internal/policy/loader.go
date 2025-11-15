@@ -1,4 +1,4 @@
-package loader
+package policy
 
 import (
 	"embed"
@@ -8,7 +8,7 @@ import (
 	"io/fs"
 	"path"
 
-	"github.com/koblas/mushu/internal/loader/re"
+	"github.com/koblas/mushu/internal/policy/re"
 	"go.starlark.net/starlark"
 )
 

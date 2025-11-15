@@ -20,12 +20,9 @@ def evaluate(context, pattern = defaultPattern, message = defaultMessage, **kwar
     title = context["resource"].get("title", "")
 
     if matcher.match(title):
-	return {"decision": "allow"}
+        return allow()
 
     if message == None:
         message = "Commit title '{}' does not match required pattern /{}/.".format(title, pattern)
 
-    return {
-	"decision": "deny",
-	"reason": message,
-    }
+    return deny(message = message)

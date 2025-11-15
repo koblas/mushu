@@ -1,4 +1,4 @@
-package policy
+package engine
 
 import (
 	"context"
@@ -7,7 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/koblas/mushu/internal/loader"
+	"github.com/koblas/mushu/internal/github"
+	"github.com/koblas/mushu/internal/policy"
 	"github.com/koblas/mushu/internal/rules"
 	"github.com/koblas/mushu/internal/teams"
 	"go.starlark.net/starlark"
@@ -17,8 +18,35 @@ import (
 // PolicyEngine handles Starlark policy evaluation
 type PolicyEngine struct {
 	teamService teams.TeamService
+	programs    map[string]*starlark.Program
+	builtin     starlark.StringDict
+}
 
-	programs map[string]*starlark.Program
+var bulitins = []*starlark.Builtin{
+	starlark.NewBuiltin("allow",
+		func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+			d := starlark.NewDict(1 + len(kwargs))
+			for _, kw := range kwargs {
+				_ = d.SetKey(kw[0], kw[1])
+			}
+
+			_ = d.SetKey(starlark.String("decision"), starlark.String("allow"))
+
+			return d, nil
+		},
+	),
+	starlark.NewBuiltin("deny",
+		func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+			d := starlark.NewDict(1 + len(kwargs))
+			for _, kw := range kwargs {
+				_ = d.SetKey(kw[0], kw[1])
+			}
+
+			_ = d.SetKey(starlark.String("decision"), starlark.String("deny"))
+
+			return d, nil
+		},
+	),
 }
 
 // NewPolicyEngine creates a new policy engine
@@ -27,8 +55,14 @@ func NewPolicyEngine(teamService teams.TeamService, rulesFile string) *PolicyEng
 		teamService = teams.NewNoOpTeamService()
 	}
 
+	builtin := starlark.StringDict{}
+	for _, b := range bulitins {
+		builtin[b.Name()] = b
+	}
+
 	return &PolicyEngine{
 		teamService: teamService,
+		builtin:     builtin,
 	}
 }
 
@@ -42,36 +76,8 @@ type EvaluationResult struct {
 	Violations           []string       `json:"violations,omitempty"`
 }
 
-// PRData represents pull request data
-type PRData struct {
-	Number            int
-	Title             string
-	State             string
-	Author            string
-	Approvals         int
-	Reviewers         []string
-	Labels            []string
-	RequiredReviewers []string
-	Additions         int
-	Deletions         int
-	ChangedFiles      int
-	Files             []rules.PRFile
-	Reviews           []Review
-}
-
-// Review represents a PR review
-type Review struct {
-	Reviewer      string   `json:"reviewer"`
-	ReviewerTeams []string `json:"reviewer_teams"`
-	State         string   `json:"state"`
-	SubmittedAt   string   `json:"submitted_at"`
-}
-
-//go:embed policy.star
-var starlarkPolicy string
-
 // EvaluatePR evaluates a pull request against policies
-func (pe *PolicyEngine) EvaluatePR(ctx context.Context, prData *PRData) ([]*EvaluationResult, error) {
+func (pe *PolicyEngine) EvaluatePR(ctx context.Context, prData *github.PRData) ([]*EvaluationResult, error) {
 	// Get user teams
 	userTeams, err := pe.teamService.GetUserTeams(ctx, prData.Author)
 	if err != nil {
@@ -106,7 +112,7 @@ func (pe *PolicyEngine) EvaluatePR(ctx context.Context, prData *PRData) ([]*Eval
 
 		tstart := time.Now()
 
-		result, err := pe.evaluateStarlarkPolicy(ctx, rule, starlarkPolicy, prData, userTeams)
+		result, err := pe.evaluateStarlarkPolicy(ctx, rule, prData, userTeams)
 		if err != nil {
 			return nil, fmt.Errorf("failed to evaluate Starlark policy: %w", err)
 		}
@@ -115,63 +121,6 @@ func (pe *PolicyEngine) EvaluatePR(ctx context.Context, prData *PRData) ([]*Eval
 
 		results = append(results, result)
 	}
-
-	// // Find matching rules for changed files
-	// var violations []string
-	// approvalRequirements := make(map[string]int)
-
-	// for _, file := range prData.Files {
-	// 	matchedRules := pe.matcher.MatchRules(allRules, file.Filename)
-
-	// 	for _, rule := range matchedRules {
-	// 		ruleViolations, ruleApprovals := pe.matcher.MatchConditions(rule.Conditions, []rules.PRFile{file})
-	// 		violations = append(violations, ruleViolations...)
-
-	// 		// Merge approval requirements
-	// 		for team, count := range ruleApprovals {
-	// 			if existing, exists := approvalRequirements[team]; !exists || count > existing {
-	// 				approvalRequirements[team] = count
-	// 			}
-	// 		}
-	// 	}
-	// }
-
-	// // Check approval requirements
-	// for team, requiredCount := range approvalRequirements {
-	// 	teamApprovals := 0
-	// 	for _, review := range prData.Reviews {
-	// 		if review.State == "APPROVED" {
-	// 			for _, reviewerTeam := range review.ReviewerTeams {
-	// 				if reviewerTeam == team {
-	// 					teamApprovals++
-	// 					break
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-
-	// 	if teamApprovals < requiredCount {
-	// 		violations = append(violations, fmt.Sprintf("Requires %d approval(s) from %s", requiredCount, team))
-	// 	}
-	// }
-
-	// // Generate Starlark policy and evaluate
-	// result, err := pe.evaluateStarlarkPolicy(starlarkPolicy, prData, userTeams)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to evaluate Starlark policy: %w", err)
-	// }
-
-	// // Merge violations
-	// if len(violations) > 0 {
-	// 	result.Violations = append(result.Violations, violations...)
-	// 	result.Decision = "deny"
-	// 	result.Reason = strings.Join(violations, "; ")
-	// }
-
-	// // Add approval requirements to result
-	// if len(approvalRequirements) > 0 {
-	// 	result.ApprovalRequirements = approvalRequirements
-	// }
 
 	return results, nil
 }
@@ -183,7 +132,7 @@ var (
 )
 
 // evaluateStarlarkPolicy evaluates the generated Starlark policy
-func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.Rule, policyCode string, prData *PRData, userTeams []string) (*EvaluationResult, error) {
+func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.Rule, prData *github.PRData, userTeams []string) (*EvaluationResult, error) {
 	// Create Starlark context
 	context := starlark.NewDict(4)
 
@@ -232,10 +181,10 @@ func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.
 		Print: func(thread *starlark.Thread, msg string) {
 			slog.InfoContext(ctx, "starlark", slog.String("thread", thread.Name), slog.String("msg", msg))
 		},
-		Load: loader.Load,
+		Load: policy.Load,
 	}
 
-	globals, err := prog.Init(thread, make(starlark.StringDict))
+	globals, err := prog.Init(thread, pe.builtin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute Starlark policy: %w", err)
 	}
@@ -275,12 +224,10 @@ func (pe *PolicyEngine) loadProgram(ruleName string) (*starlark.Program, error) 
 		return prog, nil
 	}
 
-	name, code, err := loader.Fetch(ruleName)
+	name, code, err := policy.Fetch(ruleName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch built-in policy %q: %w", ruleName, err)
 	}
-
-	decls := starlark.StringDict{}
 
 	_, prog, err := starlark.SourceProgramOptions(
 		&syntax.FileOptions{
@@ -293,7 +240,7 @@ func (pe *PolicyEngine) loadProgram(ruleName string) (*starlark.Program, error) 
 		},
 		name,
 		code,
-		decls.Has,
+		pe.builtin.Has,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile %q: %w", ruleName, err)
@@ -324,7 +271,7 @@ func (pe *PolicyEngine) filesToStarlarkList(files []rules.PRFile) *starlark.List
 	return list
 }
 
-func (pe *PolicyEngine) reviewsToStarlarkList(reviews []Review) *starlark.List {
+func (pe *PolicyEngine) reviewsToStarlarkList(reviews []github.Review) *starlark.List {
 	list := starlark.NewList(nil)
 	for _, review := range reviews {
 		reviewDict, err := convertValueToStarlark(map[string]any{

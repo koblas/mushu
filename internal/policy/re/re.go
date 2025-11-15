@@ -29,6 +29,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/koblas/mushu/internal/starutil"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 )
@@ -119,7 +120,7 @@ func reSearch(re *regexp.Regexp, str starlark.String, flags starlark.Int) (starl
 		vals[i] = m
 	}
 
-	return Marshal(vals)
+	return starutil.Marshal(vals)
 }
 
 // match(pattern, string, flags=0)

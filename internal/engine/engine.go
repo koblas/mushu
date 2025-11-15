@@ -10,6 +10,7 @@ import (
 	"github.com/koblas/mushu/internal/github"
 	"github.com/koblas/mushu/internal/policy"
 	"github.com/koblas/mushu/internal/rules"
+	"github.com/koblas/mushu/internal/starutil"
 	"github.com/koblas/mushu/internal/teams"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
@@ -137,7 +138,7 @@ func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.
 	context := starlark.NewDict(4)
 
 	// Principal
-	principal, err := convertValueToStarlark(map[string]any{
+	principal, err := starutil.Marshal(map[string]any{
 		"username":    prData.Author,
 		"teams":       userTeams,
 		"permissions": []string{"merge", "review", "approve"},
@@ -150,7 +151,7 @@ func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.
 	}
 
 	// Resource
-	resource, err := convertMapToDict(map[string]any{
+	resource, err := starutil.Marshal(map[string]any{
 		"number": prData.Number,
 		"title":  prData.Title,
 		"files":  pe.filesToStarlarkList(prData.Files),
@@ -198,7 +199,7 @@ func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.
 
 	var kwargs []starlark.Tuple
 	for k, v := range rule.Args {
-		val, err := convertValueToStarlark(v)
+		val, err := starutil.Marshal(v)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert rule arg %q to Starlark: %w", k, err)
 		}
@@ -253,7 +254,7 @@ func (pe *PolicyEngine) loadProgram(ruleName string) (*starlark.Program, error) 
 func (pe *PolicyEngine) filesToStarlarkList(files []rules.PRFile) *starlark.List {
 	list := starlark.NewList(nil)
 	for _, file := range files {
-		fileDict, err := convertValueToStarlark(map[string]any{
+		fileDict, err := starutil.Marshal(map[string]any{
 			"filename":  file.Filename,
 			"status":    file.Status,
 			"additions": file.Additions,
@@ -274,7 +275,7 @@ func (pe *PolicyEngine) filesToStarlarkList(files []rules.PRFile) *starlark.List
 func (pe *PolicyEngine) reviewsToStarlarkList(reviews []github.Review) *starlark.List {
 	list := starlark.NewList(nil)
 	for _, review := range reviews {
-		reviewDict, err := convertValueToStarlark(map[string]any{
+		reviewDict, err := starutil.Marshal(map[string]any{
 			"reviewer":       review.Reviewer,
 			"reviewer_teams": review.ReviewerTeams,
 			"state":          review.State,
@@ -291,9 +292,14 @@ func (pe *PolicyEngine) reviewsToStarlarkList(reviews []github.Review) *starlark
 }
 
 func (pe *PolicyEngine) starlarkDictToEvaluationResult(rule *rules.Rule, dict *starlark.Dict) (*EvaluationResult, error) {
-	clean, err := convertDictToMap(dict)
+	anyDict, err := starutil.Unmarshal(dict)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert Starlark dict to map: %w", err)
+	}
+
+	clean, ok := anyDict.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expected map[string]string from Starlark dict, got %T", anyDict)
 	}
 
 	result := &EvaluationResult{

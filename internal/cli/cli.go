@@ -208,8 +208,10 @@ func validateCommand() *cli.Command {
 				return fmt.Errorf("failed to create GitHub client: %w", err)
 			}
 
+			fsRoot := os.DirFS(".")
+
 			// Create team service
-			yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
+			yamlService := teams.NewYAMLTeamService(fsRoot, cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
 			// Load teams (optional - only fail on real errors, not missing files)
 			if err := yamlService.Load(ctx); err != nil && !errors.Is(err, os.ErrNotExist) {
 				slog.ErrorContext(ctx, "Failed to load teams from YAML", "error", err)
@@ -219,7 +221,7 @@ func validateCommand() *cli.Command {
 			var teamService teams.TeamService = yamlService
 
 			// Create policy engine
-			policyEngine := engine.NewPolicyEngine(teamService, cfg.Policy.RulesFile)
+			policyEngine := engine.NewPolicyEngine(teamService, cfg.Policy.RulesFile, fsRoot)
 			slog.DebugContext(ctx, "Created policy engine", "rules_file", cfg.Policy.RulesFile)
 
 			tstart := time.Now()

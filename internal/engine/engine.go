@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"time"
 
@@ -21,6 +22,7 @@ type PolicyEngine struct {
 	teamService teams.TeamService
 	programs    map[string]*starlark.Program
 	builtin     starlark.StringDict
+	fsRoot      fs.FS
 }
 
 var bulitins = []*starlark.Builtin{
@@ -51,7 +53,7 @@ var bulitins = []*starlark.Builtin{
 }
 
 // NewPolicyEngine creates a new policy engine
-func NewPolicyEngine(teamService teams.TeamService, rulesFile string) *PolicyEngine {
+func NewPolicyEngine(teamService teams.TeamService, rulesFile string, fsRoot fs.FS) *PolicyEngine {
 	if teamService == nil {
 		teamService = teams.NewNoOpTeamService()
 	}
@@ -61,9 +63,22 @@ func NewPolicyEngine(teamService teams.TeamService, rulesFile string) *PolicyEng
 		builtin[b.Name()] = b
 	}
 
+	stdlib, err := policy.Stdlib()
+	if err != nil {
+		slog.ErrorContext(context.Background(), "failed to load standard library", "error", err)
+
+		return nil
+	}
+	for _, key := range stdlib.Keys() {
+		builtin[key] = stdlib[key]
+	}
+
+	builtin.Freeze()
+
 	return &PolicyEngine{
 		teamService: teamService,
 		builtin:     builtin,
+		fsRoot:      fsRoot,
 	}
 }
 
@@ -176,13 +191,15 @@ func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.
 		return nil, fmt.Errorf("failed to load Starlark program: %w", err)
 	}
 
+	loader := policy.NewPolicyLoader(pe.fsRoot, pe.builtin)
+
 	// Execute Starlark code
 	thread := &starlark.Thread{
 		Name: rule.Name,
 		Print: func(thread *starlark.Thread, msg string) {
 			slog.InfoContext(ctx, "starlark", slog.String("thread", thread.Name), slog.String("msg", msg))
 		},
-		Load: policy.Load,
+		Load: loader.Loader(ctx),
 	}
 
 	globals, err := prog.Init(thread, pe.builtin)
@@ -192,7 +209,7 @@ func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.
 	globals.Freeze()
 
 	// Call evaluate function
-	evaluateFunc, ok := globals["evaluate"]
+	evaluateFunc, ok := globals["main"]
 	if !ok {
 		return nil, fmt.Errorf("evaluate function not found in policy")
 	}
@@ -216,6 +233,13 @@ func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.
 	return pe.starlarkDictToEvaluationResult(rule, result.(*starlark.Dict))
 }
 
+var baseCode = `
+load(%q, "evaluate")
+
+def main(context, **kwargs):
+  return evaluate(context, **kwargs)
+`
+
 func (pe *PolicyEngine) loadProgram(ruleName string) (*starlark.Program, error) {
 	if pe.programs == nil {
 		pe.programs = make(map[string]*starlark.Program)
@@ -225,10 +249,7 @@ func (pe *PolicyEngine) loadProgram(ruleName string) (*starlark.Program, error) 
 		return prog, nil
 	}
 
-	name, code, err := policy.Fetch(ruleName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch built-in policy %q: %w", ruleName, err)
-	}
+	code := fmt.Sprintf(baseCode, ruleName)
 
 	_, prog, err := starlark.SourceProgramOptions(
 		&syntax.FileOptions{
@@ -239,7 +260,7 @@ func (pe *PolicyEngine) loadProgram(ruleName string) (*starlark.Program, error) 
 			Recursion:         true,
 			LoadBindsGlobally: false,
 		},
-		name,
+		ruleName,
 		code,
 		pe.builtin.Has,
 	)

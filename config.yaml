@@ -6,7 +6,6 @@ github:
   base_url: "https://api.github.com"
 
 teams:
-  use_github_api: true
   teams_file: "teams.yaml"
   teams_dir: "teams/"
 

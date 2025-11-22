@@ -301,6 +301,7 @@ func validateCommand() *cli.Command {
 			if !cmd.Bool("dry-run") {
 				core.AddStepSummary(summary.String())
 			}
+			core.SetFailed("see summary for details")
 
 			// // Log validation result
 			// slog.InfoContext(ctx, "PR validation completed",

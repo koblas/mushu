@@ -274,6 +274,7 @@ func validateCommand() *cli.Command {
 				return fmt.Errorf("failed to validate PR: %w", err)
 			}
 
+			success := true
 			summary := strings.Builder{}
 			for _, result := range result {
 				slog.InfoContext(ctx,
@@ -286,9 +287,10 @@ func validateCommand() *cli.Command {
 				)
 
 				summary.WriteString("## ")
-				if result.Decision == "approve" {
+				if result.Decision == "allow" {
 					summary.WriteString("✅ ")
 				} else {
+					success = false
 					summary.WriteString("❌ ")
 				}
 
@@ -338,6 +340,10 @@ func validateCommand() *cli.Command {
 			// }
 
 			// slog.InfoContext(ctx, "PR validation approved")
+			if !success {
+				return fmt.Errorf("PR validation failed")
+			}
+
 			return nil
 		},
 	}

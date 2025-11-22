@@ -3,6 +3,7 @@ module github.com/koblas/mushu
 go 1.25
 
 require (
+	github.com/actions-go/toolkit v0.0.0-20231022202615-3973644be7a1
 	github.com/bmatcuk/doublestar/v4 v4.9.1
 	github.com/goccy/go-yaml v1.18.0
 	github.com/google/go-github/v60 v60.0.0

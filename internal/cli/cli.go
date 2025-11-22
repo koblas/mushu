@@ -7,8 +7,10 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/actions-go/toolkit/core"
 	"github.com/koblas/mushu/internal/config"
 	"github.com/koblas/mushu/internal/engine"
 	"github.com/koblas/mushu/internal/github"
@@ -250,6 +252,7 @@ func validateCommand() *cli.Command {
 				return fmt.Errorf("failed to validate PR: %w", err)
 			}
 
+			summary := strings.Builder{}
 			for _, result := range result {
 				slog.InfoContext(ctx,
 					"evaluation result",
@@ -259,6 +262,22 @@ func validateCommand() *cli.Command {
 					slog.Int("violations_count", len(result.Violations)),
 					slog.Int("approval_requirements_count", len(result.ApprovalRequirements)),
 				)
+
+				summary.WriteString("## ")
+				if result.Decision == "approve" {
+					summary.WriteString("✅ ")
+				} else {
+					summary.WriteString("❌ ")
+				}
+
+				summary.WriteString(result.Rule.Name)
+				summary.WriteString("\n\n")
+				summary.WriteString(result.Reason)
+				summary.WriteString("\n\n")
+			}
+
+			if !cmd.Bool("dry-run") {
+				core.AddStepSummary(summary.String())
 			}
 
 			// // Log validation result

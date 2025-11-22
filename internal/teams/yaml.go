@@ -7,9 +7,9 @@ import (
 	"io/fs"
 	"log/slog"
 	"maps"
-	"path/filepath"
 	"strings"
 
+	"github.com/koblas/mushu/internal/logging"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,16 +38,14 @@ type Team struct {
 type YAMLTeamService struct {
 	fs        fs.FS
 	teamsFile string
-	teamsDir  string
 	teams     map[string]Team
 }
 
 // NewYAMLTeamService creates a new YAML-based team service
-func NewYAMLTeamService(fsys fs.FS, teamsFile, teamsDir string) *YAMLTeamService {
+func NewYAMLTeamService(fsys fs.FS, teamsFile string) *YAMLTeamService {
 	return &YAMLTeamService{
 		fs:        fsys,
 		teamsFile: teamsFile,
-		teamsDir:  teamsDir,
 		teams:     make(map[string]Team),
 	}
 }
@@ -55,20 +53,23 @@ func NewYAMLTeamService(fsys fs.FS, teamsFile, teamsDir string) *YAMLTeamService
 // Load loads team data from YAML files (optional)
 func (s *YAMLTeamService) Load(ctx context.Context) error {
 	// Load main teams file (optional)
-	if s.teamsFile != "" {
+	if s.teamsFile != "" && s.teamsFile != "*" {
 		if err := s.loadTeamsFile(ctx, s.teamsFile); err != nil {
 			// Log at info level but don't fail - team loading is optional
-			slog.InfoContext(ctx, "Teams file not found or failed to load", "teams_file", s.teamsFile, "error", err)
+			slog.InfoContext(ctx, "Teams file not found or failed to load",
+				slog.String("teams_file", s.teamsFile),
+				logging.Err(err),
+			)
 
 			return fmt.Errorf("failed to load teams file: %w", err)
 		}
 	}
 
 	// Load additional team files from teams directory (optional)
-	if s.teamsDir != "" {
-		if err := s.loadTeamsDirectory(ctx, s.teamsDir); err != nil {
+	if s.teamsFile != "*" {
+		if err := s.loadTeamsDirectory(ctx); err != nil {
 			// Log at info level but don't fail - team loading is optional
-			slog.InfoContext(ctx, "Teams directory not found or failed to load", "teams_dir", s.teamsDir, "error", err)
+			slog.InfoContext(ctx, "Teams directory not found or failed to load", logging.Err(err))
 
 			return fmt.Errorf("failed to load teams directory: %w", err)
 		}
@@ -96,14 +97,14 @@ func (s *YAMLTeamService) loadTeamsFile(ctx context.Context, filename string) er
 
 	maps.Copy(s.teams, teamsData.Teams)
 
-	slog.InfoContext(ctx, "Successfully loaded teams file", "teams_file", filename)
+	slog.InfoContext(ctx, "Successfully loaded teams file", slog.String("teams_file", filename))
 
 	return nil
 }
 
 // loadTeamsDirectory loads all YAML files from a directory
-func (s *YAMLTeamService) loadTeamsDirectory(ctx context.Context, dir string) error {
-	entries, err := fs.ReadDir(s.fs, dir)
+func (s *YAMLTeamService) loadTeamsDirectory(ctx context.Context) error {
+	entries, err := fs.ReadDir(s.fs, ".")
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid) {
 			return nil
@@ -117,7 +118,7 @@ func (s *YAMLTeamService) loadTeamsDirectory(ctx context.Context, dir string) er
 			continue
 		}
 
-		filename := filepath.Join(dir, entry.Name())
+		filename := entry.Name()
 		if err := s.loadTeamsFile(ctx, filename); err != nil {
 			return fmt.Errorf("directory team file %s: %w", filename, err)
 		}

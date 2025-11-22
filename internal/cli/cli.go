@@ -171,11 +171,11 @@ func validateCommand() *cli.Command {
 		Name:        "validate",
 		Usage:       "Validate a pull request against configured policies and rules",
 		Description: "Validates a pull request number against the configured policies",
-		ArgsUsage:   "<pr-number>",
+		ArgsUsage:   "<pr-number|pr-url>",
 		Arguments: []cli.Argument{
-			&cli.IntArg{
-				Name:      "pr-number",
-				UsageText: "Pull request number to validate",
+			&cli.StringArg{
+				Name:      "pr",
+				UsageText: "Either the pull request number or full URL to the PR",
 			},
 		},
 		OnUsageError: usageErrorHandler,
@@ -191,27 +191,30 @@ func validateCommand() *cli.Command {
 				return err
 			}
 
-			prNumber := cmd.IntArg("pr-number")
-			if prNumber == 0 {
-				return fmt.Errorf("validate command requires a PR number argument")
+			prValue := cmd.StringArg("pr")
+			if prValue == "" {
+				return fmt.Errorf("validate command requires a PR argument")
 			}
 
-			ctx = logging.ContextWith(ctx, slog.Int("pr_number", prNumber))
+			baseRepo := github.NewWithHost(cfg.GitHub.Owner, cfg.GitHub.Repo, cfg.GitHub.Host)
+
+			prNumber, repo, err := github.ParsePRValue(prValue)
+			if repo == nil {
+				repo = baseRepo
+			}
+
+			ctx = logging.ContextWith(ctx, slog.Int("pr", prNumber))
 
 			client, err := github.NewClient(ctx, &github.Config{
-				Token:   cfg.GitHub.Token,
-				BaseURL: cfg.GitHub.BaseURL,
-				Owner:   cfg.GitHub.Owner,
-				Repo:    cfg.GitHub.Repo,
+				Token: cfg.GitHub.Token,
+				Repo:  repo,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to create GitHub client: %w", err)
 			}
 
-			fsRoot := os.DirFS(".")
-
 			// Create team service
-			yamlService := teams.NewYAMLTeamService(fsRoot, cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
+			yamlService := teams.NewYAMLTeamService(os.DirFS(cfg.Teams.TeamsDir), cfg.Teams.TeamsFile)
 			// Load teams (optional - only fail on real errors, not missing files)
 			if err := yamlService.Load(ctx); err != nil && !errors.Is(err, os.ErrNotExist) {
 				slog.ErrorContext(ctx, "Failed to load teams from YAML", "error", err)
@@ -221,7 +224,7 @@ func validateCommand() *cli.Command {
 			var teamService teams.TeamService = yamlService
 
 			// Create policy engine
-			policyEngine := engine.NewPolicyEngine(teamService, cfg.Policy.RulesFile, fsRoot)
+			policyEngine := engine.NewPolicyEngine(teamService, cfg.Policy.RulesFile, os.DirFS(cfg.Policy.PolicyDir))
 			slog.DebugContext(ctx, "Created policy engine", "rules_file", cfg.Policy.RulesFile)
 
 			tstart := time.Now()
@@ -340,7 +343,7 @@ func listCommand() *cli.Command {
 					slog.InfoContext(ctx, "Listing available teams")
 
 					// Load teams from YAML (optional - only fail on real errors, not missing files)
-					yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile, cfg.Teams.TeamsDir)
+					yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile)
 					if err := yamlService.Load(ctx); err != nil {
 						slog.ErrorContext(ctx, "Failed to load teams from YAML", "error", err)
 						return fmt.Errorf("failed to load teams: %w", err)

@@ -25,10 +25,10 @@ type Config struct {
 
 // GitHubConfig contains GitHub API configuration
 type GitHubConfig struct {
-	Token   string `yaml:"token"`
-	Owner   string `yaml:"owner"`
-	Repo    string `yaml:"repo"`
-	BaseURL string `yaml:"base_url"`
+	Token string `yaml:"token"`
+	Owner string `yaml:"owner"`
+	Repo  string `yaml:"repo"`
+	Host  string `yaml:"host"`
 }
 
 // TeamsConfig contains team management configuration
@@ -128,8 +128,8 @@ func Load(ctx context.Context, configPath string, flagSet *flag.FlagSet) (*Confi
 
 // setDefaults sets default values for configuration fields
 func setDefaults(cfg *Config) {
-	if cfg.GitHub.BaseURL == "" {
-		cfg.GitHub.BaseURL = "https://api.github.com"
+	if cfg.GitHub.Host == "" {
+		cfg.GitHub.Host = "github.com"
 	}
 	if cfg.Teams.TeamsFile == "" {
 		cfg.Teams.TeamsFile = "teams.yaml"

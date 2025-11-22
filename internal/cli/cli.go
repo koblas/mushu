@@ -172,6 +172,13 @@ func validateCommand() *cli.Command {
 		Usage:       "Validate a pull request against configured policies and rules",
 		Description: "Validates a pull request number against the configured policies",
 		ArgsUsage:   "<pr-number|pr-url>",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "dry-run",
+				Usage:   "Perform a dry run without making any changes (default: false)",
+				Aliases: []string{"n"},
+			},
+		},
 		Arguments: []cli.Argument{
 			&cli.StringArg{
 				Name:      "pr",

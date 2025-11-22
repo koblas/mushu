@@ -1,0 +1,146 @@
+package github
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"regexp"
+	"strings"
+
+	"github.com/google/go-github/v75/github"
+	"github.com/koblas/mushu/internal/toolkit/core"
+	"golang.org/x/oauth2"
+)
+
+func token() string {
+	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
+		return t
+	}
+	for _, input := range []string{"github-token", "token"} {
+		if t, ok := core.GetInput(input); ok {
+			return t
+		}
+	}
+	return ""
+}
+
+func NewClient() *github.Client {
+	token := token()
+	httpClient := http.DefaultClient
+	if token != "" {
+		ts := oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: token},
+		)
+		httpClient = oauth2.NewClient(context.Background(), ts)
+	}
+	if server, ok := os.LookupEnv("GITHUB_SERVER_URL"); !ok || server == "https://github.com" {
+		return github.NewClient(httpClient)
+	}
+	client, err := github.NewEnterpriseClient(os.Getenv("GITHUB_SERVER_URL"), os.Getenv("GITHUB_SERVER_URL"), httpClient)
+	if err != nil {
+		core.Errorf("failed to initialise GitHub client: %v", err)
+	}
+	return client
+}
+
+var GitHub = NewClient()
+
+func authorize(r *http.Request) {
+	t := token()
+	if t != "" {
+		r.SetBasicAuth("", t)
+	}
+}
+
+type Matcher func(path string) bool
+
+type RepositoryFile struct {
+	Path     string
+	FileInfo os.FileInfo
+	Data     []byte
+}
+
+// DownloadSelectedRepositoryFiles downloads files from a given repository and granch, given that their name matches regarding the `include` function
+func DownloadSelectedRepositoryFiles(c *http.Client, owner, repo, branch string, include Matcher) map[string]RepositoryFile {
+	u := fmt.Sprintf("https://api.github.com/repos/%s/%s/tarball/%s", owner, repo, branch)
+	core.Debugf("Downloading tarball for repo: %s", u)
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		core.Warningf("failed to download repository: %v", err)
+		return nil
+	}
+	authorize(req)
+	resp, err := c.Do(req)
+	if err != nil {
+		core.Warningf("failed to download repository: %v", err)
+		return nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		core.Warningf("failed to download repository: unexpected code %d", resp.StatusCode)
+		return nil
+	}
+	defer resp.Body.Close()
+	var body io.Reader = resp.Body
+	switch resp.Header.Get("Content-Type") {
+	case "application/gzip", "application/x-gzip":
+		body, err = gzip.NewReader(body)
+		if err != nil {
+			core.Warningf("failed to download repository: %v", err)
+			return nil
+		}
+	}
+	files := map[string]RepositoryFile{}
+	tr := tar.NewReader(body)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break // End of archive
+		}
+		if err != nil {
+			core.Warningf("failed to download repository: %v", err)
+			return nil
+		}
+		if hdr.Format == tar.FormatPAX || hdr.FileInfo().IsDir() {
+			continue
+		}
+		splittedName := strings.SplitN(hdr.Name, "/", 2)
+		if len(splittedName) > 1 {
+			name := splittedName[1]
+			if include(name) {
+				core.Debugf("Downloading %v", hdr.Name)
+				b := bytes.NewBuffer(nil)
+				if _, err := io.Copy(b, tr); err != nil {
+					core.Warningf("failed to download repository: %v", err)
+					return nil
+				}
+				files[name] = RepositoryFile{
+					Path:     name,
+					FileInfo: hdr.FileInfo(),
+					Data:     b.Bytes(),
+				}
+			}
+		}
+	}
+	return files
+}
+
+// MatchesOneOf returns a matcher returning whether the path matches one of the provided glob patterns
+func MatchesOneOf(patterns ...string) Matcher {
+	return func(path string) bool {
+		for _, p := range patterns {
+			exp, err := regexp.CompilePOSIX(p)
+			if err != nil {
+				core.Warningf("unable to compile pattern %s: %v", p, err)
+			}
+			if exp.MatchString(path) {
+				return true
+			}
+		}
+		return false
+	}
+}

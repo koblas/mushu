@@ -65,3 +65,11 @@ func NewClient(ctx context.Context, cfg *Config) (*Client, error) {
 		repo:   cfg.Repo.RepoName(),
 	}, nil
 }
+
+func NewClientFromGitHubClient(githubClient *github.Client, owner, repo string) *Client {
+	return &Client{
+		client: githubClient,
+		owner:  owner,
+		repo:   repo,
+	}
+}

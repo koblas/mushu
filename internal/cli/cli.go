@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/actions-go/toolkit/core"
-	githubtool "github.com/actions-go/toolkit/github"
 	"github.com/koblas/mushu/internal/config"
 	"github.com/koblas/mushu/internal/engine"
 	"github.com/koblas/mushu/internal/github"
 	"github.com/koblas/mushu/internal/logging"
 	"github.com/koblas/mushu/internal/teams"
+	githubtool "github.com/koblas/mushu/internal/toolkit/github"
 	"github.com/koblas/mushu/internal/version"
 	"github.com/urfave/cli/v3"
 )
@@ -202,36 +202,47 @@ func validateCommand() *cli.Command {
 			}
 
 			prValue := cmd.StringArg("pr")
-			if prValue == "" {
-				act := githubtool.ParseActionEnv()
 
+			var repo github.Repo
+			var prNumber int
+			var client *github.Client
+
+			act := githubtool.ParseActionEnv()
+			if act.Payload.PullRequest != nil {
 				hook := act.Payload.PullRequest
 				if hook == nil || hook.Number == nil {
 					return fmt.Errorf("validate command requires a PR argument")
 				}
 
-				prValue = fmt.Sprintf("%d", *hook.Number)
-			}
+				prNumber = *hook.Number
 
-			baseRepo := github.NewWithHost(cfg.GitHub.Owner, cfg.GitHub.Repo, cfg.GitHub.Host)
+				tclient := githubtool.NewClient()
+				client = github.NewClientFromGitHubClient(tclient, act.Repo.Owner, act.Repo.Repo)
+			} else {
+				if prValue == "" {
+					return fmt.Errorf("validate command requires a PR argument")
+				}
 
-			prNumber, repo, err := github.ParsePRValue(prValue)
-			if err != nil {
-				return fmt.Errorf("invalid PR value: %w", err)
-			}
-			if repo == nil {
-				repo = baseRepo
+				baseRepo := github.NewWithHost(cfg.GitHub.Owner, cfg.GitHub.Repo, cfg.GitHub.Host)
+
+				prNumber, repo, err = github.ParsePRValue(prValue)
+				if err != nil {
+					return fmt.Errorf("invalid PR value: %w", err)
+				}
+				if repo == nil {
+					repo = baseRepo
+				}
+
+				client, err = github.NewClient(ctx, &github.Config{
+					Token: cfg.GitHub.Token,
+					Repo:  repo,
+				})
+				if err != nil {
+					return fmt.Errorf("failed to create GitHub client: %w", err)
+				}
 			}
 
 			ctx = logging.ContextWith(ctx, slog.Int("pr", prNumber))
-
-			client, err := github.NewClient(ctx, &github.Config{
-				Token: cfg.GitHub.Token,
-				Repo:  repo,
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create GitHub client: %w", err)
-			}
 
 			// Create team service
 			yamlService := teams.NewYAMLTeamService(os.DirFS(cfg.Teams.TeamsDir), cfg.Teams.TeamsFile)

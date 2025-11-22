@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/actions-go/toolkit/core"
+	githubtool "github.com/actions-go/toolkit/github"
 	"github.com/koblas/mushu/internal/config"
 	"github.com/koblas/mushu/internal/engine"
 	"github.com/koblas/mushu/internal/github"
@@ -202,12 +203,22 @@ func validateCommand() *cli.Command {
 
 			prValue := cmd.StringArg("pr")
 			if prValue == "" {
-				return fmt.Errorf("validate command requires a PR argument")
+				act := githubtool.ParseActionEnv()
+
+				hook := act.Payload.PullRequest
+				if hook == nil || hook.Number == nil {
+					return fmt.Errorf("validate command requires a PR argument")
+				}
+
+				prValue = fmt.Sprintf("%d", *hook.Number)
 			}
 
 			baseRepo := github.NewWithHost(cfg.GitHub.Owner, cfg.GitHub.Repo, cfg.GitHub.Host)
 
 			prNumber, repo, err := github.ParsePRValue(prValue)
+			if err != nil {
+				return fmt.Errorf("invalid PR value: %w", err)
+			}
 			if repo == nil {
 				repo = baseRepo
 			}

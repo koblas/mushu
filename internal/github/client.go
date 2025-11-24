@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 
-	"github.com/google/go-github/v75/github"
+	"github.com/google/go-github/v79/github"
 )
 
 var ErrNoAuth = errors.New("authentication not successful")

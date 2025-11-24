@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/google/go-github/v75/github"
+	"github.com/google/go-github/v79/github"
 	"github.com/koblas/mushu/internal/toolkit/core"
 	"golang.org/x/oauth2"
 )
@@ -38,13 +38,16 @@ func NewClient() *github.Client {
 		)
 		httpClient = oauth2.NewClient(context.Background(), ts)
 	}
-	if server, ok := os.LookupEnv("GITHUB_SERVER_URL"); !ok || server == "https://github.com" {
-		return github.NewClient(httpClient)
+	client := github.NewClient(httpClient)
+	if server, ok := os.LookupEnv("GITHUB_SERVER_URL"); ok {
+		var err error
+		client, err = client.WithEnterpriseURLs(server, server)
+		if err != nil {
+			core.Errorf("failed to initialise GitHub client: %v", err)
+
+		}
 	}
-	client, err := github.NewEnterpriseClient(os.Getenv("GITHUB_SERVER_URL"), os.Getenv("GITHUB_SERVER_URL"), httpClient)
-	if err != nil {
-		core.Errorf("failed to initialise GitHub client: %v", err)
-	}
+
 	return client
 }
 
@@ -84,7 +87,7 @@ func DownloadSelectedRepositoryFiles(c *http.Client, owner, repo, branch string,
 		core.Warningf("failed to download repository: unexpected code %d", resp.StatusCode)
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var body io.Reader = resp.Body
 	switch resp.Header.Get("Content-Type") {
 	case "application/gzip", "application/x-gzip":

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/google/go-github/v75/github"
+	"github.com/google/go-github/v79/github"
 	"github.com/koblas/mushu/internal/rules"
 	"github.com/koblas/mushu/internal/teams"
 )

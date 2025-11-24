@@ -71,7 +71,7 @@ func Main() exitCode {
 			return exitError
 		}
 
-		slog.ErrorContext(ctx, "Application error", "error", err)
+		slog.ErrorContext(ctx, "Application error", logging.Err(err))
 
 		if errors.Is(err, github.ErrNoAuth) {
 			return exitAuth
@@ -207,14 +207,9 @@ func validateCommand() *cli.Command {
 			var prNumber int
 			var client *github.Client
 
-			act := githubtool.ParseActionEnv()
-			if act.Payload.PullRequest != nil {
-				hook := act.Payload.PullRequest
-				if hook == nil || hook.Number == nil {
-					return fmt.Errorf("validate command requires a PR argument")
-				}
-
-				prNumber = *hook.Number
+			act, err := githubtool.ParseActionEnv()
+			if err == nil {
+				prNumber = act.Issue.Number
 
 				tclient := githubtool.NewClient()
 				client = github.NewClientFromGitHubClient(tclient, act.Repo.Owner, act.Repo.Repo)

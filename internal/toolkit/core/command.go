@@ -5,30 +5,21 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync"
-)
-
-const (
-	cmdString = "::"
 )
 
 var (
-	stdout       io.Writer = os.Stdout
-	stdoutSetter sync.Mutex
-	dataEscapes  = map[string]string{
-		"\r": "%0D",
-		"\n": "%0A",
-	}
-	escapes = map[string]string{
-		":": "%3A",
-		",": "%2C",
-	}
+	stdout   io.Writer = os.Stdout
+	replacer           = strings.NewReplacer(
+		"%", "%25",
+		"\r", "%0D",
+		"\n", "%0A",
+		":", "%3A",
+		",", "%2C",
+	)
 )
 
 func SetStdout(w io.Writer) {
-	stdoutSetter.Lock()
 	stdout = w
-	stdoutSetter.Unlock()
 }
 
 // Issue displays a plain typed message following github actions interface
@@ -40,9 +31,7 @@ func Issue(kind string, message ...string) {
 // see https://github.com/actions/toolkit/blob/e69833ed16500afaa7d137a9cf6da76fb8fb54da/packages/core/src/command.ts#L19
 func IssueCommand(kind string, properties map[string]string, message string) {
 	c := &command{kind, properties, message}
-	stdoutSetter.Lock()
-	fmt.Fprintln(stdout, c.String())
-	stdoutSetter.Unlock()
+	_, _ = fmt.Fprintln(stdout, c.String())
 }
 
 // issueFileCommand implements stores the command in a file
@@ -54,8 +43,9 @@ func issueFileCommandWithPerm(command string, message string, flag int, perm os.
 		if err != nil {
 			return err
 		}
-		defer fd.Close()
-		fmt.Fprintln(fd, message)
+		defer func() { _ = fd.Close() }()
+		_, _ = fmt.Fprintln(fd, message)
+
 		return nil
 	}
 	return fmt.Errorf("unable to find command file %s", command)
@@ -78,29 +68,25 @@ type command struct {
 }
 
 func (c *command) String() string {
-	s := cmdString + c.command
+	const cmdString = "::"
+
+	build := strings.Builder{}
+
+	_, _ = build.WriteString(cmdString)
+	_, _ = build.WriteString(c.command)
+
 	sep := " "
 	for key, value := range c.properties {
-		s += sep + key + "=" + escape(value)
+		_, _ = build.WriteString(sep)
 		sep = ","
+
+		_, _ = build.WriteString(key)
+		_, _ = build.WriteString("=")
+		_, _ = build.WriteString(replacer.Replace(value))
 	}
-	return s + cmdString + escape(c.message)
-}
 
-func escapePatterns(v string, replacementsArg ...map[string]string) string {
-	v = strings.Replace(v, "%", "%25", -1)
-	for _, replacements := range replacementsArg {
-		for pattern, replacement := range replacements {
-			v = strings.Replace(v, pattern, replacement, -1)
-		}
-	}
-	return v
-}
+	_, _ = build.WriteString(cmdString)
+	_, _ = build.WriteString(replacer.Replace(c.message))
 
-func escapeData(v string) string {
-	return escapePatterns(v, dataEscapes)
-}
-
-func escape(v string) string {
-	return escapePatterns(v, escapes, dataEscapes)
+	return build.String()
 }

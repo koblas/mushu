@@ -1,154 +1,304 @@
 package github
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
-	"github.com/google/go-github/v75/github"
+	gogithub "github.com/google/go-github/v79/github"
 	"github.com/koblas/mushu/internal/toolkit/core"
 )
-
-// Context contains details on the workflow execution
-var Context = ParseActionEnv()
-
-// WebhookPayload webhook payload object that triggered the workflow
-type WebhookPayload struct {
-	*github.PushEvent
-	*github.MilestoneEvent
-	// TODO: make this work with a simple interface user must be able to access payload.Repository for example
-	// *github.CheckRunEvent
-	// *github.CheckSuiteEvent
-	// *github.CommitCommentEvent
-	// *github.CreateEvent
-	// *github.DeleteEvent
-	// *github.DeployKeyEvent
-	// *github.DeploymentEvent
-	// *github.DeploymentStatusEvent
-	// *github.ForkEvent
-	// *github.GollumEvent
-	// *github.InstallationEvent
-	// *github.InstallationRepositoriesEvent
-	// *github.IssueEvent
-	// *github.IssueCommentEvent
-	// *github.IssuesEvent
-	// *github.LabelEvent
-	// *github.MarketplacePurchaseEvent
-	// *github.MemberEvent
-	// *github.MembershipEvent
-	// *github.MetaEvent
-	// *github.OrgBlockEvent
-	// *github.OrganizationEvent
-	// *github.PageBuildEvent
-	// *github.PingEvent
-	// *github.ProjectEvent
-	// *github.ProjectColumnEvent
-	// *github.ProjectCardEvent
-	// *github.PublicEvent
-	// *github.PullRequestReviewEvent
-	// *github.PullRequestReviewCommentEvent
-	// *github.ReleaseEvent
-	// *github.RepositoryEvent
-	// *github.RepositoryDispatchEvent
-	// *github.StarEvent
-	// *github.StatusEvent
-	// *github.TeamEvent
-	// *github.TeamAddEvent
-	// *github.UserEvent
-	// *github.WatchEvent
-	Number       *int                 `json:"number"`
-	Label        *github.Label        `json:"label"`
-	Repository   *github.Repository   `json:"repository"`
-	Issue        *github.Issue        `json:"issue"`
-	PullRequest  *github.PullRequest  `json:"pull_request"`
-	Sender       *github.Contributor  `json:"sender"`
-	Action       string               `json:"action"`
-	Installation *github.Installation `json:"installation"`
-}
-
-type ActionIssue struct {
-	Owner  string
-	Repo   string
-	Number int
-}
 
 type ActionRepo struct {
 	Owner string
 	Repo  string
 }
 
+type ActionIssue struct {
+	ActionRepo
+	Number int
+}
+
 // ActionContext contains details on the workflow execution
 type ActionContext struct {
-	Payload           WebhookPayload
-	EventName         string
-	SHA               string
-	Ref               string
-	Workflow          string
-	Action            string
-	Actor             string
-	Issue             ActionIssue
-	Repo              ActionRepo
+	Payload    any
+	EventName  string
+	SHA        string
+	Ref        string
+	Workflow   string
+	Action     string
+	Actor      string
+	RunAttempt int
+	RunNumber  int
+	RunId      int
+	ApiUrl     string
+	ServerUrl  string
+	GraphqlUrl string
+	Issue      ActionIssue
+	Repo       ActionRepo
+
+	// Added for convenience
 	OutputFilePath    string
 	StateFilePath     string
 	ExportEnvFilePath string
 }
 
-func noGitHubEvent(path string) {
-	fmt.Println(fmt.Sprintf("GITHUB_EVENT_PATH %s does not exist", path))
+var errNoRepoInEvent = errors.New("no repository information in event payload")
+
+func repoFromEvent(event any) (ActionRepo, error) {
+	var r *gogithub.Repository
+	// try to get repo from payload
+	switch e := event.(type) {
+	case *gogithub.BranchProtectionConfigurationEvent:
+		r = e.GetRepo()
+	case *gogithub.BranchProtectionRuleEvent:
+		r = e.GetRepo()
+	case *gogithub.CheckRunEvent:
+		r = e.GetRepo()
+	case *gogithub.CheckSuiteEvent:
+		r = e.GetRepo()
+	case *gogithub.CodeScanningAlertEvent:
+		r = e.GetRepo()
+	case *gogithub.CommitCommentEvent:
+		r = e.GetRepo()
+	case *gogithub.ContentReferenceEvent:
+		r = e.GetRepo()
+	case *gogithub.CreateEvent:
+		r = e.GetRepo()
+	case *gogithub.CustomPropertyEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.CustomPropertyValuesEvent:
+		r = e.GetRepo()
+	case *gogithub.DeleteEvent:
+		r = e.GetRepo()
+	case *gogithub.DependabotAlertEvent:
+		r = e.GetRepo()
+	case *gogithub.DeployKeyEvent:
+		r = e.GetRepo()
+	case *gogithub.DeploymentEvent:
+		r = e.GetRepo()
+	case *gogithub.DeploymentReviewEvent:
+		r = e.GetRepo()
+	case *gogithub.DeploymentStatusEvent:
+		r = e.GetRepo()
+	case *gogithub.DeploymentProtectionRuleEvent:
+		r = e.GetRepo()
+	case *gogithub.DiscussionEvent:
+		r = e.GetRepo()
+	case *gogithub.DiscussionCommentEvent:
+		r = e.GetRepo()
+	case *gogithub.ForkEvent:
+		r = e.GetRepo()
+	case *gogithub.GitHubAppAuthorizationEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.GollumEvent:
+		r = e.GetRepo()
+	case *gogithub.InstallationEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.InstallationRepositoriesEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.InstallationTargetEvent:
+		r = e.GetRepository()
+	case *gogithub.IssueCommentEvent:
+		r = e.GetRepo()
+	case *gogithub.IssuesEvent:
+		r = e.GetRepo()
+	case *gogithub.LabelEvent:
+		r = e.GetRepo()
+	case *gogithub.MarketplacePurchaseEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.MemberEvent:
+		r = e.GetRepo()
+	case *gogithub.MembershipEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.MergeGroupEvent:
+		r = e.GetRepo()
+	case *gogithub.MetaEvent:
+		r = e.GetRepo()
+	case *gogithub.MilestoneEvent:
+		r = e.GetRepo()
+	case *gogithub.OrganizationEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.OrgBlockEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.PackageEvent:
+		r = e.GetRepo()
+	case *gogithub.PageBuildEvent:
+		r = e.GetRepo()
+	case *gogithub.PersonalAccessTokenRequestEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.PingEvent:
+		r = e.GetRepo()
+	case *gogithub.ProjectV2Event:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.ProjectV2ItemEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.PublicEvent:
+		r = e.GetRepo()
+	case *gogithub.PullRequestEvent:
+		r = e.GetRepo()
+	case *gogithub.PullRequestReviewEvent:
+		r = e.GetRepo()
+	case *gogithub.PullRequestReviewCommentEvent:
+		r = e.GetRepo()
+	case *gogithub.PullRequestReviewThreadEvent:
+		r = e.GetRepo()
+	case *gogithub.PullRequestTargetEvent:
+		r = e.GetRepo()
+	case *gogithub.PushEvent:
+		r = &gogithub.Repository{
+			Owner: e.GetRepo().GetOwner(),
+			Name:  e.GetRepo().Name,
+		}
+	case *gogithub.RegistryPackageEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.RepositoryEvent:
+		r = e.GetRepo()
+	case *gogithub.RepositoryDispatchEvent:
+		r = e.GetRepo()
+	case *gogithub.RepositoryImportEvent:
+		r = e.GetRepo()
+	case *gogithub.RepositoryRulesetEvent:
+		r = e.GetRepository()
+	case *gogithub.RepositoryVulnerabilityAlertEvent:
+		r = e.GetRepository()
+	case *gogithub.ReleaseEvent:
+		r = e.GetRepo()
+	case *gogithub.SecretScanningAlertEvent:
+		r = e.GetRepo()
+	case *gogithub.SecretScanningAlertLocationEvent:
+		r = e.GetRepo()
+	case *gogithub.SecurityAdvisoryEvent:
+		r = e.GetRepository()
+	case *gogithub.SecurityAndAnalysisEvent:
+		r = e.GetRepository()
+	case *gogithub.SponsorshipEvent:
+		r = e.GetRepository()
+	case *gogithub.StatusEvent:
+		r = e.GetRepo()
+	case *gogithub.TeamEvent:
+		r = e.GetRepo()
+	case *gogithub.TeamAddEvent:
+		r = e.GetRepo()
+	case *gogithub.UserEvent:
+		return ActionRepo{}, fmt.Errorf("%T: %w", e, errNoRepoInEvent)
+	case *gogithub.WatchEvent:
+		r = e.GetRepo()
+	case *gogithub.WorkflowDispatchEvent:
+		r = e.GetRepo()
+	case *gogithub.WorkflowJobEvent:
+		r = e.GetRepo()
+	case *gogithub.WorkflowRunEvent:
+		r = e.GetRepo()
+	default:
+		return ActionRepo{}, fmt.Errorf("unsupported event type %T", e)
+	}
+
+	return ActionRepo{
+		Owner: r.GetOwner().GetLogin(),
+		Repo:  r.GetName(),
+	}, nil
 }
 
-func getIndex(a []string, i int) string {
-	if len(a) > i {
-		return a[i]
+func issueFromEvent(event any, repo ActionRepo) ActionIssue {
+	var number int
+
+	switch e := event.(type) {
+	case *gogithub.MilestoneEvent:
+		number = e.GetMilestone().GetNumber()
+	case *gogithub.IssueEvent:
+		number = e.GetIssue().GetNumber()
+	case *gogithub.PullRequestEvent:
+		number = e.GetNumber()
 	}
-	return ""
+
+	return ActionIssue{
+		ActionRepo: repo,
+		Number:     number,
+	}
 }
 
 // ParseActionEnv parses the environemnt and extracts the ActionContext on demand. For example in tests
-func ParseActionEnv() ActionContext {
-	r := strings.SplitN(os.Getenv("GITHUB_REPOSITORY"), "/", 2)
-	repo := ActionRepo{
-		Owner: getIndex(r, 0),
-		Repo:  getIndex(r, 1),
+func ParseActionEnv() (ActionContext, error) {
+	repo := ActionRepo{}
+	repoSet := false
+
+	if val, ok := os.LookupEnv("GITHUB_REPOSITORY"); ok {
+		r := strings.SplitN(val, "/", 2)
+		if len(r) != 2 {
+			return ActionContext{}, errors.New("gogithub_REPOSITORY_OWNER is malformed")
+		}
+		repo.Owner = r[0]
+		repo.Repo = r[1]
+		repoSet = true
 	}
+
+	eventPath := os.Getenv("GITHUB_EVENT_PATH")
+	if eventPath == "" {
+		return ActionContext{}, errors.New("gogithub_EVENT_PATH is not set")
+
+	}
+	payload, err := os.ReadFile(eventPath)
+	if err != nil {
+		return ActionContext{}, fmt.Errorf("could not read gogithub_EVENT_PATH=%q file: %w", eventPath, err)
+	}
+
+	eventName := os.Getenv("GITHUB_EVENT_NAME")
+	hook, err := gogithub.ParseWebHook(eventName, payload)
+	if err != nil {
+		return ActionContext{}, fmt.Errorf("could not parse gogithub webhook payload for event %q: %w", eventName, err)
+	}
+
+	intEnv := func(varName string) int {
+		valStr := os.Getenv(varName)
+
+		val, err := strconv.Atoi(valStr)
+		if err != nil {
+			return 0
+		}
+
+		return val
+	}
+
+	defEnv := func(val, def string) string {
+		val, ok := os.LookupEnv(val)
+		if !ok {
+			return def
+		}
+		return val
+	}
+
+	if !repoSet {
+		repo, err = repoFromEvent(hook)
+
+		if !errors.Is(err, errNoRepoInEvent) {
+			return ActionContext{}, fmt.Errorf("could not extract repository from event payload: %w", err)
+		}
+	}
+
 	ctx := ActionContext{
-		EventName:         os.Getenv("GITHUB_EVENT_NAME"),
-		SHA:               os.Getenv("GITHUB_SHA"),
-		Ref:               os.Getenv("GITHUB_REF"),
-		Workflow:          os.Getenv("GITHUB_WORKFLOW"),
-		Action:            os.Getenv("GITHUB_ACTION"),
-		Actor:             os.Getenv("GITHUB_ACTOR"),
+		EventName:  eventName,
+		SHA:        os.Getenv("GITHUB_SHA"),
+		Ref:        os.Getenv("GITHUB_REF"),
+		Workflow:   os.Getenv("GITHUB_WORKFLOW"),
+		Action:     os.Getenv("GITHUB_ACTION"),
+		Actor:      os.Getenv("GITHUB_ACTOR"),
+		RunAttempt: intEnv("GITHUB_RUN_ATTEMPT"),
+		RunNumber:  intEnv("GITHUB_RUN_NUMBER"),
+		RunId:      intEnv("GITHUB_RUN_ID"),
+		ApiUrl:     defEnv(os.Getenv("GITHUB_API_URL"), "https://api.gogithub.com"),
+		ServerUrl:  defEnv(os.Getenv("GITHUB_SERVER_URL"), "https://gogithub.com"),
+		GraphqlUrl: defEnv(os.Getenv("GITHUB_GRAPHQL_URL"), "https://api.gogithub.com/graphql"),
+
 		OutputFilePath:    os.Getenv(core.GitHubOutputFilePathEnvName),
 		StateFilePath:     os.Getenv(core.GitHubStateFilePathEnvName),
 		ExportEnvFilePath: os.Getenv(core.GitHubExportEnvFilePathEnvName),
 		Repo:              repo,
-		Issue: ActionIssue{
-			Owner: repo.Owner,
-			Repo:  repo.Repo,
-		},
+		Payload:           hook,
+		Issue:             issueFromEvent(hook, repo),
 	}
-	eventPath := os.Getenv("GITHUB_EVENT_PATH")
-	if _, err := os.Stat(eventPath); err == nil && eventPath != "" {
-		fd, err := os.Open(eventPath)
-		if err != nil {
-			noGitHubEvent(eventPath)
-		} else {
-			json.NewDecoder(fd).Decode(&ctx.Payload)
-		}
-	} else {
-		noGitHubEvent(eventPath)
-	}
-	if ctx.Payload.Issue != nil && ctx.Payload.Issue.Number != nil {
-		ctx.Issue.Number = *ctx.Payload.Issue.Number
-	} else if ctx.Payload.PullRequest != nil && ctx.Payload.PullRequest.Number != nil {
-		ctx.Issue.Number = *ctx.Payload.PullRequest.Number
-	} else if ctx.Payload.Number != nil {
-		ctx.Issue.Number = *ctx.Payload.Issue.Number
-	}
-	if ctx.Payload.Repository != nil {
-		ctx.Issue.Owner, ctx.Issue.Repo = ctx.Payload.Repository.GetOwner().GetLogin(), ctx.Payload.Repository.GetName()
-		ctx.Repo.Owner, ctx.Repo.Repo = ctx.Issue.Owner, ctx.Issue.Repo
-	}
-	return ctx
+
+	return ctx, nil
 }

@@ -1,4 +1,4 @@
-package github
+package action
 
 import (
 	"errors"
@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	gogithub "github.com/google/go-github/v79/github"
-	"github.com/koblas/mushu/internal/toolkit/core"
 )
 
 type ActionRepo struct {
@@ -292,9 +291,9 @@ func ParseActionEnv() (ActionContext, error) {
 		ServerUrl:  defEnv(os.Getenv("GITHUB_SERVER_URL"), "https://gogithub.com"),
 		GraphqlUrl: defEnv(os.Getenv("GITHUB_GRAPHQL_URL"), "https://api.gogithub.com/graphql"),
 
-		OutputFilePath:    os.Getenv(core.GitHubOutputFilePathEnvName),
-		StateFilePath:     os.Getenv(core.GitHubStateFilePathEnvName),
-		ExportEnvFilePath: os.Getenv(core.GitHubExportEnvFilePathEnvName),
+		OutputFilePath:    os.Getenv(GitHubOutputFilePathEnvName),
+		StateFilePath:     os.Getenv(GitHubStateFilePathEnvName),
+		ExportEnvFilePath: os.Getenv(GitHubExportEnvFilePathEnvName),
 		Repo:              repo,
 		Payload:           hook,
 		Issue:             issueFromEvent(hook, repo),

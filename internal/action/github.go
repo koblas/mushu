@@ -1,4 +1,4 @@
-package github
+package action
 
 import (
 	"archive/tar"
@@ -7,29 +7,30 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/google/go-github/v79/github"
-	"github.com/koblas/mushu/internal/toolkit/core"
 	"golang.org/x/oauth2"
 )
 
 func token() string {
-	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
-		return t
+	if v, ok := os.LookupEnv("GITHUB_TOKEN"); ok && v != "" {
+		return v
 	}
+
 	for _, input := range []string{"github-token", "token"} {
-		if t, ok := core.GetInput(input); ok {
+		if t, ok := GetInput(input); ok {
 			return t
 		}
 	}
+
 	return ""
 }
 
-func NewClient() *github.Client {
+func NewClient() (*github.Client, error) {
 	token := token()
 	httpClient := http.DefaultClient
 	if token != "" {
@@ -43,15 +44,14 @@ func NewClient() *github.Client {
 		var err error
 		client, err = client.WithEnterpriseURLs(server, server)
 		if err != nil {
-			core.Errorf("failed to initialise GitHub client: %v", err)
-
+			return nil, fmt.Errorf("configure GitHub Enterprise URLs: %w", err)
 		}
 	}
 
-	return client
+	return client, nil
 }
 
-var GitHub = NewClient()
+var GitHub, _ = NewClient()
 
 func authorize(r *http.Request) {
 	t := token()
@@ -69,23 +69,20 @@ type RepositoryFile struct {
 }
 
 // DownloadSelectedRepositoryFiles downloads files from a given repository and granch, given that their name matches regarding the `include` function
-func DownloadSelectedRepositoryFiles(c *http.Client, owner, repo, branch string, include Matcher) map[string]RepositoryFile {
+func DownloadSelectedRepositoryFiles(c *http.Client, owner, repo, branch string, include Matcher) (map[string]RepositoryFile, error) {
 	u := fmt.Sprintf("https://api.github.com/repos/%s/%s/tarball/%s", owner, repo, branch)
-	core.Debugf("Downloading tarball for repo: %s", u)
+	slog.Debug("Downloading tarball for", "repo", u)
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
-		core.Warningf("failed to download repository: %v", err)
-		return nil
+		return nil, fmt.Errorf("could not create request to download repository: %w", err)
 	}
 	authorize(req)
 	resp, err := c.Do(req)
 	if err != nil {
-		core.Warningf("failed to download repository: %v", err)
-		return nil
+		return nil, fmt.Errorf("could not download repository: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		core.Warningf("failed to download repository: unexpected code %d", resp.StatusCode)
-		return nil
+		return nil, fmt.Errorf("could not download repository: unexpected code %d", resp.StatusCode)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var body io.Reader = resp.Body
@@ -93,8 +90,7 @@ func DownloadSelectedRepositoryFiles(c *http.Client, owner, repo, branch string,
 	case "application/gzip", "application/x-gzip":
 		body, err = gzip.NewReader(body)
 		if err != nil {
-			core.Warningf("failed to download repository: %v", err)
-			return nil
+			return nil, fmt.Errorf("could not create gzip reader: %w", err)
 		}
 	}
 	files := map[string]RepositoryFile{}
@@ -105,8 +101,7 @@ func DownloadSelectedRepositoryFiles(c *http.Client, owner, repo, branch string,
 			break // End of archive
 		}
 		if err != nil {
-			core.Warningf("failed to download repository: %v", err)
-			return nil
+			return nil, fmt.Errorf("could not read tarball: %w", err)
 		}
 		if hdr.Format == tar.FormatPAX || hdr.FileInfo().IsDir() {
 			continue
@@ -115,11 +110,10 @@ func DownloadSelectedRepositoryFiles(c *http.Client, owner, repo, branch string,
 		if len(splittedName) > 1 {
 			name := splittedName[1]
 			if include(name) {
-				core.Debugf("Downloading %v", hdr.Name)
+				slog.Debug("Downloading " + hdr.Name)
 				b := bytes.NewBuffer(nil)
 				if _, err := io.Copy(b, tr); err != nil {
-					core.Warningf("failed to download repository: %v", err)
-					return nil
+					return nil, fmt.Errorf("could not read file %q from tarball: %w", name, err)
 				}
 				files[name] = RepositoryFile{
 					Path:     name,
@@ -129,21 +123,5 @@ func DownloadSelectedRepositoryFiles(c *http.Client, owner, repo, branch string,
 			}
 		}
 	}
-	return files
-}
-
-// MatchesOneOf returns a matcher returning whether the path matches one of the provided glob patterns
-func MatchesOneOf(patterns ...string) Matcher {
-	return func(path string) bool {
-		for _, p := range patterns {
-			exp, err := regexp.CompilePOSIX(p)
-			if err != nil {
-				core.Warningf("unable to compile pattern %s: %v", p, err)
-			}
-			if exp.MatchString(path) {
-				return true
-			}
-		}
-		return false
-	}
+	return files, nil
 }

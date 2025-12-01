@@ -1,7 +1,7 @@
 
 [TestContext/with_event_issues_event.json - 1]
 issues_event.json
-github.ActionContext{
+action.ActionContext{
     Payload: &github.PushEvent{
         PushID:       (*int64)(nil),
         Head:         (*string)(nil),
@@ -169,11 +169,11 @@ github.ActionContext{
     ApiUrl:     "https://api.gogithub.com",
     ServerUrl:  "https://gogithub.com",
     GraphqlUrl: "https://api.gogithub.com/graphql",
-    Issue:      github.ActionIssue{
-        ActionRepo: github.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
+    Issue:      action.ActionIssue{
+        ActionRepo: action.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
         Number:     0,
     },
-    Repo:              github.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
+    Repo:              action.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
     OutputFilePath:    "",
     StateFilePath:     "",
     ExportEnvFilePath: "",
@@ -182,7 +182,7 @@ github.ActionContext{
 
 [TestContext/with_event_label_event.json - 1]
 label_event.json
-github.ActionContext{
+action.ActionContext{
     Payload: &github.PushEvent{
         PushID:       (*int64)(nil),
         Head:         (*string)(nil),
@@ -350,11 +350,11 @@ github.ActionContext{
     ApiUrl:     "https://api.gogithub.com",
     ServerUrl:  "https://gogithub.com",
     GraphqlUrl: "https://api.gogithub.com/graphql",
-    Issue:      github.ActionIssue{
-        ActionRepo: github.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
+    Issue:      action.ActionIssue{
+        ActionRepo: action.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
         Number:     0,
     },
-    Repo:              github.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
+    Repo:              action.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
     OutputFilePath:    "",
     StateFilePath:     "",
     ExportEnvFilePath: "",
@@ -363,7 +363,7 @@ github.ActionContext{
 
 [TestContext/with_event_milestone_event.json - 1]
 milestone_event.json
-github.ActionContext{
+action.ActionContext{
     Payload: &github.PushEvent{
         PushID:       (*int64)(nil),
         Head:         (*string)(nil),
@@ -531,11 +531,11 @@ github.ActionContext{
     ApiUrl:     "https://api.gogithub.com",
     ServerUrl:  "https://gogithub.com",
     GraphqlUrl: "https://api.gogithub.com/graphql",
-    Issue:      github.ActionIssue{
-        ActionRepo: github.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
+    Issue:      action.ActionIssue{
+        ActionRepo: action.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
         Number:     0,
     },
-    Repo:              github.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
+    Repo:              action.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
     OutputFilePath:    "",
     StateFilePath:     "",
     ExportEnvFilePath: "",
@@ -544,7 +544,7 @@ github.ActionContext{
 
 [TestContext/with_event_push_event.json - 1]
 push_event.json
-github.ActionContext{
+action.ActionContext{
     Payload: &github.PushEvent{
         PushID:  (*int64)(nil),
         Head:    (*string)(nil),
@@ -765,11 +765,11 @@ github.ActionContext{
     ApiUrl:     "https://api.gogithub.com",
     ServerUrl:  "https://gogithub.com",
     GraphqlUrl: "https://api.gogithub.com/graphql",
-    Issue:      github.ActionIssue{
-        ActionRepo: github.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
+    Issue:      action.ActionIssue{
+        ActionRepo: action.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
         Number:     0,
     },
-    Repo:              github.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
+    Repo:              action.ActionRepo{Owner:"tjamet", Repo:"actions-playground"},
     OutputFilePath:    "",
     StateFilePath:     "",
     ExportEnvFilePath: "",

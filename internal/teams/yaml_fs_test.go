@@ -16,7 +16,6 @@ func TestYAMLTeamService_Load(t *testing.T) {
 		name      string
 		fsys      fs.FS
 		teamsFile string
-		teamsDir  string
 		wantTeams map[string]Team
 		wantError bool
 		errorType string
@@ -41,7 +40,6 @@ teams:
 				},
 			},
 			teamsFile: "teams.yaml",
-			teamsDir:  "",
 			wantTeams: map[string]Team{
 				"frontend": {
 					Description: "Frontend developers",
@@ -78,8 +76,7 @@ teams:
 `),
 				},
 			},
-			teamsFile: "",
-			teamsDir:  "teams",
+			teamsFile: "teams/*",
 			wantTeams: map[string]Team{
 				"frontend": {
 					Description: "Frontend developers",
@@ -115,8 +112,7 @@ teams:
 `),
 				},
 			},
-			teamsFile: "teams.yaml",
-			teamsDir:  "teams",
+			teamsFile: "{teams.yaml,teams/*}",
 			wantTeams: map[string]Team{
 				"main": {
 					Description: "Main team",
@@ -133,15 +129,13 @@ teams:
 			name:      "missing teams file - should not error",
 			fsys:      fstest.MapFS{},
 			teamsFile: "nonexistent.yaml",
-			teamsDir:  "",
 			wantTeams: map[string]Team{},
 			wantError: false,
 		},
 		{
 			name:      "missing teams directory - should not error",
 			fsys:      fstest.MapFS{},
-			teamsFile: "",
-			teamsDir:  "nonexistent",
+			teamsFile: "nonexistant/*",
 			wantTeams: map[string]Team{},
 			wantError: false,
 		},
@@ -153,7 +147,6 @@ teams:
 				},
 			},
 			teamsFile: "teams.yaml",
-			teamsDir:  "",
 			wantTeams: map[string]Team{},
 			wantError: true,
 			errorType: "parse",
@@ -166,7 +159,6 @@ teams:
 				},
 			},
 			teamsFile: "teams.yaml",
-			teamsDir:  "",
 			wantTeams: map[string]Team{},
 			wantError: false,
 		},
@@ -178,7 +170,6 @@ teams:
 				},
 			},
 			teamsFile: "teams.yaml",
-			teamsDir:  "",
 			wantTeams: map[string]Team{},
 			wantError: false,
 		},
@@ -186,7 +177,7 @@ teams:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := NewYAMLTeamService(tt.fsys, tt.teamsFile, tt.teamsDir)
+			service := NewYAMLTeamService(tt.fsys, tt.teamsFile)
 
 			err := service.Load(t.Context())
 
@@ -227,7 +218,7 @@ teams:
 		},
 	}
 
-	service := NewYAMLTeamService(fsys, "teams.yaml", "")
+	service := NewYAMLTeamService(fsys, "teams.yaml")
 	err := service.Load(context.Background())
 	require.NoError(t, err)
 
@@ -290,7 +281,7 @@ teams:
 		},
 	}
 
-	service := NewYAMLTeamService(fsys, "teams.yaml", "")
+	service := NewYAMLTeamService(fsys, "teams.yaml")
 	err := service.Load(context.Background())
 	require.NoError(t, err)
 
@@ -344,7 +335,7 @@ teams:
 		},
 	}
 
-	service := NewYAMLTeamService(fsys, "teams.yaml", "")
+	service := NewYAMLTeamService(fsys, "teams.yaml")
 	err := service.Load(context.Background())
 	require.NoError(t, err)
 
@@ -390,7 +381,7 @@ teams:
 		},
 	}
 
-	service := NewYAMLTeamService(fsys, "teams.yaml", "teams")
+	service := NewYAMLTeamService(fsys, "{teams.yaml,teams/*.yaml}")
 	err := service.Load(context.Background())
 	require.NoError(t, err)
 
@@ -437,7 +428,7 @@ teams:
 		},
 	}
 
-	service := NewYAMLTeamService(fsys, "teams.yaml", "teams")
+	service := NewYAMLTeamService(fsys, "{teams.yaml,teams/*}")
 	err := service.Load(context.Background())
 	require.NoError(t, err)
 

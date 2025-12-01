@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/actions-go/toolkit/core"
+	"github.com/koblas/mushu/internal/action"
 	"github.com/koblas/mushu/internal/config"
 	"github.com/koblas/mushu/internal/engine"
 	"github.com/koblas/mushu/internal/github"
 	"github.com/koblas/mushu/internal/logging"
 	"github.com/koblas/mushu/internal/teams"
-	githubtool "github.com/koblas/mushu/internal/toolkit/github"
 	"github.com/koblas/mushu/internal/version"
 	"github.com/urfave/cli/v3"
 )
@@ -207,11 +207,14 @@ func validateCommand() *cli.Command {
 			var prNumber int
 			var client *github.Client
 
-			act, err := githubtool.ParseActionEnv()
+			act, err := action.ParseActionEnv()
 			if err == nil {
 				prNumber = act.Issue.Number
 
-				tclient := githubtool.NewClient()
+				tclient, err := action.NewClient()
+				if err != nil {
+					return fmt.Errorf("failed to create GitHub client from action: %w", err)
+				}
 				client = github.NewClientFromGitHubClient(tclient, act.Repo.Owner, act.Repo.Repo)
 			} else {
 				if prValue == "" {
@@ -298,7 +301,13 @@ func validateCommand() *cli.Command {
 			if !cmd.Bool("dry-run") {
 				core.AddStepSummary(summary.String())
 			}
-			core.SetFailed("see summary for details")
+
+			if success {
+				slog.Info("PR validation succeeded")
+			} else {
+				slog.Error("PR validation failed")
+			}
+			// core.SetFailed("see summary for details")
 
 			// // Log validation result
 			// slog.InfoContext(ctx, "PR validation completed",

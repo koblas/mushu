@@ -9,7 +9,7 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/koblas/mushu/internal/logging"
+	"github.com/bmatcuk/doublestar/v4"
 	"gopkg.in/yaml.v3"
 )
 
@@ -52,27 +52,17 @@ func NewYAMLTeamService(fsys fs.FS, teamsFile string) *YAMLTeamService {
 
 // Load loads team data from YAML files (optional)
 func (s *YAMLTeamService) Load(ctx context.Context) error {
-	// Load main teams file (optional)
-	if s.teamsFile != "" && s.teamsFile != "*" {
-		if err := s.loadTeamsFile(ctx, s.teamsFile); err != nil {
-			// Log at info level but don't fail - team loading is optional
-			slog.InfoContext(ctx, "Teams file not found or failed to load",
-				slog.String("teams_file", s.teamsFile),
-				logging.Err(err),
-			)
-
-			return fmt.Errorf("failed to load teams file: %w", err)
+	err := doublestar.GlobWalk(s.fs, s.teamsFile, func(path string, d fs.DirEntry) error {
+		if d.IsDir() {
+			return nil
 		}
-	}
 
-	// Load additional team files from teams directory (optional)
-	if s.teamsFile != "*" {
-		if err := s.loadTeamsDirectory(ctx); err != nil {
-			// Log at info level but don't fail - team loading is optional
-			slog.InfoContext(ctx, "Teams directory not found or failed to load", logging.Err(err))
+		return s.loadTeamsFile(ctx, path)
+	})
 
-			return fmt.Errorf("failed to load teams directory: %w", err)
-		}
+	if err != nil {
+
+		return fmt.Errorf("failed to load teams file: %w", err)
 	}
 
 	return nil

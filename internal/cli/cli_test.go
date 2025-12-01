@@ -41,7 +41,7 @@ func TestValidateCommand_MissingPRNumber(t *testing.T) {
 		t.Error("Expected error when PR number is missing, got nil")
 	}
 
-	if err != nil && !strings.Contains(err.Error(), "validate command requires a PR number") {
+	if err != nil && !strings.Contains(err.Error(), "PR argument") {
 		t.Errorf("Expected error message about missing PR number, got: %v", err)
 	}
 }

@@ -155,7 +155,7 @@ func TestCacheFile(t *testing.T) {
 
 func TestCopyURL(t *testing.T) {
 	data := "hello-world"
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(data)) }))
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(data)) }))
 	defer s.Close()
 	b := bytes.NewBuffer(nil)
 	assert.NoError(t, copyURL(b, s.URL))
@@ -171,8 +171,7 @@ func TestCopyURL(t *testing.T) {
 	assert.Error(t, copyURL(bytes.NewBuffer(nil), s.URL))
 }
 
-type writerInError struct {
-}
+type writerInError struct{}
 
 func (writerInError) Write([]byte) (int, error) {
 	return 0, errors.New("test-error")

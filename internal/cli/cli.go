@@ -120,7 +120,6 @@ func Execute(ctx context.Context, args []string) error {
 		Commands: []*cli.Command{
 			validateCommand(),
 			listCommand(),
-			generateCommand(),
 			versionCommand(),
 		},
 	}
@@ -416,55 +415,6 @@ func listCommand() *cli.Command {
 					return nil
 				},
 			},
-		},
-	}
-}
-
-// generateCommand returns the generate command
-func generateCommand() *cli.Command {
-	return &cli.Command{
-		Name:        "generate",
-		Usage:       "Generate Starlark policy from YAML rules",
-		Description: "Generates Starlark policy code from YAML rules configuration",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "rules",
-				Usage: "Rules file to process",
-			},
-			&cli.StringFlag{
-				Name:  "output",
-				Usage: "Output file (default: stdout)",
-			},
-		},
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			ctx, cfg, err := loadConfigWithFlags(ctx, cmd)
-			if err != nil {
-				return err
-			}
-
-			rulesFile := cmd.String("rules")
-			if rulesFile == "" {
-				rulesFile = cfg.Policy.RulesFile
-			}
-			outputFile := cmd.String("output")
-
-			slog.InfoContext(ctx, "Generate command executed", "rules_file", rulesFile, "output_file", outputFile)
-
-			// For now, just print the parameters
-			fmt.Printf("Generate policy from rules file: %s\n", rulesFile)
-			if outputFile != "" {
-				fmt.Printf("Output to file: %s\n", outputFile)
-			} else {
-				fmt.Println("Output to stdout")
-			}
-
-			slog.InfoContext(ctx, "Policy generation requested")
-
-			fmt.Println("Policy generation not yet implemented")
-			fmt.Println("This would generate Starlark code from mushu.yaml rules")
-
-			slog.WarnContext(ctx, "Policy generation not implemented", "rules_file", cfg.Policy.RulesFile)
-			return nil
 		},
 	}
 }

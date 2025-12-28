@@ -136,7 +136,7 @@ func copyURL(dest io.Writer, source string) error {
 	if err != nil {
 		return wrapError(err, "download failed")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return wrapError(fmt.Errorf("unexpected status code %d (%s). Expecting %d", resp.StatusCode, resp.Status, http.StatusOK), "")
 	}

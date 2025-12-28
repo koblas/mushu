@@ -56,7 +56,7 @@ func (crf *RuleBase) loadRules(dir string) ([]*Rule, error) {
 		return nil, fmt.Errorf("failed to open rules %q in %q: %w", dir, crf.filename, err)
 	}
 
-	defer fd.Close()
+	defer func() { _ = fd.Close() }()
 
 	data, err := io.ReadAll(fd)
 	if err != nil {

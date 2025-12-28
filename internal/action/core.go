@@ -23,8 +23,6 @@ var (
 	delimiter = prefix + "file_command_" + randomString(16)
 	stopToken = prefix + "stop_commands_" + randomString(16)
 
-	status = StatusSuccess
-
 	logger = slog.New(NewSlogHandler())
 )
 
@@ -84,7 +82,7 @@ func GetBoolInput(name string) bool {
 
 // GetInput gets the value of an input.  The value is also trimmed.
 func GetInput(name string) (string, bool) {
-	if val, ok := os.LookupEnv(strings.ToUpper("INPUT_" + strings.Replace(name, " ", "_", -1))); ok {
+	if val, ok := os.LookupEnv(strings.ToUpper("INPUT_" + strings.ReplaceAll(name, " ", "_"))); ok {
 		return strings.TrimSpace(val), true
 	}
 
@@ -118,7 +116,6 @@ func SetFailedf(format string, args ...interface{}) {
 
 // SetFailed sets the action status to failed and sets an error message
 func SetFailed(message string) {
-	status = StatusFailed
 	logger.Error(message)
 }
 
@@ -198,7 +195,6 @@ func IsDebug() bool {
 func AddStepSummary(summary string) error {
 	// os.O_CREATE: If pathname does not exist, create it as a regular file.
 	err := issueFileCommandWithPerm(GitHubSummaryPathEnvName, summary, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0644)
-
 	if err != nil {
 		return fmt.Errorf("add step summary: %v", err)
 	}
@@ -211,7 +207,6 @@ func AddStepSummary(summary string) error {
 func ReplaceStepSummary(summary string) error {
 	// os.O_CREATE: If pathname does not exist, create it as a regular file.
 	err := issueFileCommandWithPerm(GitHubSummaryPathEnvName, summary, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0)
-
 	if err != nil {
 		return fmt.Errorf("replace step summary: %v", err)
 	}

@@ -3,7 +3,6 @@ package rules_test
 import (
 	"context"
 	"embed"
-	_ "embed"
 	"testing"
 
 	"github.com/koblas/mushu/internal/rules"

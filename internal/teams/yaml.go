@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"maps"
-	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"gopkg.in/yaml.v3"
@@ -59,9 +58,7 @@ func (s *YAMLTeamService) Load(ctx context.Context) error {
 
 		return s.loadTeamsFile(ctx, path)
 	})
-
 	if err != nil {
-
 		return fmt.Errorf("failed to load teams file: %w", err)
 	}
 
@@ -88,31 +85,6 @@ func (s *YAMLTeamService) loadTeamsFile(ctx context.Context, filename string) er
 	maps.Copy(s.teams, teamsData.Teams)
 
 	slog.InfoContext(ctx, "Successfully loaded teams file", slog.String("teams_file", filename))
-
-	return nil
-}
-
-// loadTeamsDirectory loads all YAML files from a directory
-func (s *YAMLTeamService) loadTeamsDirectory(ctx context.Context) error {
-	entries, err := fs.ReadDir(s.fs, ".")
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid) {
-			return nil
-		}
-
-		return fmt.Errorf("failed to read teams directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml") {
-			continue
-		}
-
-		filename := entry.Name()
-		if err := s.loadTeamsFile(ctx, filename); err != nil {
-			return fmt.Errorf("directory team file %s: %w", filename, err)
-		}
-	}
 
 	return nil
 }

@@ -33,7 +33,7 @@ func buildTestTool(t *testing.T) *action.DownloadTool {
 
 func TestDownloadTool(t *testing.T) {
 	data := "hello-world"
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(data)) }))
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(data)) }))
 	defer s.Close()
 
 	d := buildTestTool(t)

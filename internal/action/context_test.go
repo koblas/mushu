@@ -15,6 +15,8 @@ func TestContext(t *testing.T) {
 		"push_event.json",
 	}
 
+	t.Setenv("TZ", "UTC")
+
 	for _, path := range files {
 		t.Run("with event "+path, func(t *testing.T) {
 			t.Setenv("GITHUB_ACTIONS", "true")

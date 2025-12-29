@@ -1,7 +1,6 @@
 package action
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -17,7 +16,7 @@ func TestContext(t *testing.T) {
 	}
 
 	for _, path := range files {
-		t.Run(fmt.Sprintf("with event %s", path), func(t *testing.T) {
+		t.Run("with event "+path, func(t *testing.T) {
 			t.Setenv("GITHUB_ACTIONS", "true")
 			t.Setenv("GITHUB_HEAD_REF", "")
 			t.Setenv("GITHUB_ACTOR", "tjamet")

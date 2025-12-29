@@ -65,7 +65,7 @@ func (s *GitHubTeamService) GetTeamMembers(ctx context.Context, teamSlug string)
 		return nil, fmt.Errorf("failed to get team members: %w", err)
 	}
 
-	var usernames []string
+	usernames := make([]string, 0, len(members))
 	for _, member := range members {
 		usernames = append(usernames, *member.Login)
 	}

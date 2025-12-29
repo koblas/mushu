@@ -39,16 +39,16 @@ func IssueCommand(kind string, properties map[string]string, message string) {
 // see https://github.com/actions/toolkit/pull/571/files#diff-9ce6eb99f5fb5529e795254801e03ae56d67d3d5fcbec635f91e9a8a61ad8b64R10
 func issueFileCommandWithPerm(command string, message string, flag int, perm os.FileMode) error {
 	if path, ok := os.LookupEnv(command); ok {
-		fd, err := os.OpenFile(path, flag, perm)
+		fd, err := os.OpenFile(path, flag, perm) // #nosec G304 -- controlled by environment
 		if err != nil {
-			return err
+			return fmt.Errorf("opening command file %s: %w", path, err)
 		}
 		defer func() { _ = fd.Close() }()
 		if _, err = fd.Write([]byte(message)); err != nil {
-			return err
+			return fmt.Errorf("writing message: %s: %w", path, err)
 		}
 		if _, err = fd.Write([]byte("\n")); err != nil {
-			return err
+			return fmt.Errorf("writing newline: %w", err)
 		}
 
 		return nil
@@ -64,6 +64,7 @@ func issueFileCommand(command string, message string) error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 

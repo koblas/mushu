@@ -1,3 +1,4 @@
+//nolint:forbidigo
 package cli
 
 import (
@@ -23,13 +24,13 @@ import (
 
 type exitCode int
 
-type ErrCmdUsage struct {
+type CmdUsageError struct {
 	err error
 	cmd *cli.Command
 }
 
-func (e *ErrCmdUsage) Error() string {
-	return fmt.Sprintf("command usage error: %s", e.err.Error())
+func (e *CmdUsageError) Error() string {
+	return "command usage error: " + e.err.Error()
 }
 
 const (
@@ -64,7 +65,7 @@ func Main() exitCode {
 		"log_format", cfg.Logging.Format)
 
 	if err := Execute(ctx, os.Args); err != nil {
-		if uerr := new(ErrCmdUsage); errors.As(err, &uerr) {
+		if uerr := new(CmdUsageError); errors.As(err, &uerr) {
 			fmt.Printf("Error: %s\n\n", uerr.err.Error())
 			_ = cli.ShowSubcommandHelp(uerr.cmd)
 
@@ -124,11 +125,11 @@ func Execute(ctx context.Context, args []string) error {
 		},
 	}
 
-	return app.Run(ctx, args)
+	return app.Run(ctx, args) //nolint:wrapcheck
 }
 
 func usageErrorHandler(ctx context.Context, cmd *cli.Command, err error, isSubcommand bool) error {
-	return &ErrCmdUsage{err: err, cmd: cmd}
+	return &CmdUsageError{err: err, cmd: cmd}
 }
 
 // loadConfigWithFlags loads config with values from CLI flags
@@ -202,7 +203,6 @@ func validateCommand() *cli.Command {
 
 			prValue := cmd.StringArg("pr")
 
-			var repo github.Repo
 			var prNumber int
 			var client *github.Client
 
@@ -210,19 +210,20 @@ func validateCommand() *cli.Command {
 			if err == nil {
 				prNumber = act.Issue.Number
 
-				tclient, err := action.NewClient()
+				tclient, err := action.NewClient(ctx)
 				if err != nil {
 					return fmt.Errorf("failed to create GitHub client from action: %w", err)
 				}
 				client = github.NewClientFromGitHubClient(tclient, act.Repo.Owner, act.Repo.Repo)
 			} else {
 				if prValue == "" {
-					return fmt.Errorf("validate command requires a PR argument")
+					return errors.New("validate command requires a PR argument")
 				}
 
 				baseRepo := github.NewWithHost(cfg.GitHub.Owner, cfg.GitHub.Repo, cfg.GitHub.Host)
 
-				prNumber, repo, err = github.ParsePRValue(prValue)
+				ghprNumber, repo, err := github.ParsePRValue(prValue)
+				prNumber = ghprNumber
 				if err != nil {
 					return fmt.Errorf("invalid PR value: %w", err)
 				}
@@ -246,13 +247,14 @@ func validateCommand() *cli.Command {
 			// Load teams (optional - only fail on real errors, not missing files)
 			if err := yamlService.Load(ctx); err != nil && !errors.Is(err, os.ErrNotExist) {
 				slog.ErrorContext(ctx, "Failed to load teams from YAML", "error", err)
+
 				return fmt.Errorf("failed to load teams: %w", err)
 			}
 
 			var teamService teams.TeamService = yamlService
 
 			// Create policy engine
-			policyEngine := engine.NewPolicyEngine(teamService, cfg.Policy.RulesFile, os.DirFS(cfg.Policy.PolicyDir))
+			policyEngine := engine.NewPolicyEngine(ctx, teamService, cfg.Policy.RulesFile, os.DirFS(cfg.Policy.PolicyDir))
 			slog.DebugContext(ctx, "Created policy engine", "rules_file", cfg.Policy.RulesFile)
 
 			tstart := time.Now()
@@ -344,7 +346,7 @@ func validateCommand() *cli.Command {
 
 			// slog.InfoContext(ctx, "PR validation approved")
 			if !success {
-				return fmt.Errorf("PR validation failed")
+				return errors.New("PR validation failed")
 			}
 
 			return nil
@@ -404,6 +406,7 @@ func listCommand() *cli.Command {
 					yamlService := teams.NewYAMLTeamService(os.DirFS("."), cfg.Teams.TeamsFile)
 					if err := yamlService.Load(ctx); err != nil {
 						slog.ErrorContext(ctx, "Failed to load teams from YAML", "error", err)
+
 						return fmt.Errorf("failed to load teams: %w", err)
 					}
 

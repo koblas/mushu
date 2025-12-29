@@ -17,18 +17,19 @@ func buildTestTool(t *testing.T) *action.DownloadTool {
 
 	rooter := func(path string) *os.Root {
 		p := filepath.Join(t.TempDir(), path)
-		err := os.Mkdir(p, 0755)
+		err := os.Mkdir(p, 0o755) // #nosec G301 -- test code
 		require.NoError(t, err)
+
 		r, err := os.OpenRoot(p)
 		require.NoError(t, err)
 
 		return r
 	}
 
-	return &action.DownloadTool{
-		TmpRoot:   rooter("_temp"),
-		CacheRoot: rooter("_cache"),
-	}
+	return action.NewDownloadTool(
+		action.WithDownloadTmpRoot(rooter("_temp")),
+		action.WithDownloadCacheRoot(rooter("_cache")),
+	)
 }
 
 func TestDownloadTool(t *testing.T) {
@@ -38,7 +39,7 @@ func TestDownloadTool(t *testing.T) {
 
 	d := buildTestTool(t)
 
-	source, err := d.Download(s.URL)
+	source, err := d.Download(t.Context(), s.URL)
 	require.NoError(t, err)
 	_, err = source.Root.Stat(source.Name)
 	require.NoError(t, err)
@@ -54,17 +55,17 @@ func TestGetCachedToolOrDownload(t *testing.T) {
 
 	d := buildTestTool(t)
 
-	f, err := d.GetCachedToolOrDownload(action.CacheOptions{Tool: "my-tool", Version: "1.0.1"}, s.URL)
+	f, err := d.GetCachedToolOrDownload(t.Context(), action.CacheOptions{Tool: "my-tool", Version: "1.0.1"}, s.URL)
 	require.NoError(t, err)
-	bytes, err := os.ReadFile(f)
+	bytes, err := os.ReadFile(f) // #nosec G304
 	require.NoError(t, err)
 	assert.Equal(t, data, string(bytes))
 
 	s.Close()
 
-	f, err = d.GetCachedToolOrDownload(action.CacheOptions{Tool: "my-tool", Version: "1.0.1"}, s.URL)
+	f, err = d.GetCachedToolOrDownload(t.Context(), action.CacheOptions{Tool: "my-tool", Version: "1.0.1"}, s.URL)
 	require.NoError(t, err)
-	bytes, err = os.ReadFile(f)
+	bytes, err = os.ReadFile(f) // #nosec G304
 	require.NoError(t, err)
 	assert.Equal(t, data, string(bytes))
 }

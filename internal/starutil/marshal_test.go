@@ -140,7 +140,7 @@ func TestMarshal_IntSlice(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 3, list.Len())
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		var val int
 		err := starlark.AsInt(list.Index(i), &val)
 		require.NoError(t, err)

@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -53,7 +54,7 @@ var bulitins = []*starlark.Builtin{
 }
 
 // NewPolicyEngine creates a new policy engine
-func NewPolicyEngine(teamService teams.TeamService, rulesFile string, fsRoot fs.FS) *PolicyEngine {
+func NewPolicyEngine(ctx context.Context, teamService teams.TeamService, rulesFile string, fsRoot fs.FS) *PolicyEngine {
 	if teamService == nil {
 		teamService = teams.NewNoOpTeamService()
 	}
@@ -65,7 +66,7 @@ func NewPolicyEngine(teamService teams.TeamService, rulesFile string, fsRoot fs.
 
 	stdlib, err := policy.Stdlib()
 	if err != nil {
-		slog.ErrorContext(context.Background(), "failed to load standard library", "error", err)
+		slog.ErrorContext(ctx, "failed to load standard library", "error", err)
 
 		return nil
 	}
@@ -108,13 +109,12 @@ func (pe *PolicyEngine) EvaluatePR(ctx context.Context, prData *github.PRData) (
 		return nil, fmt.Errorf("failed to load rules: %w", err)
 	}
 
-	var files []string
+	files := make([]string, 0, len(prData.Files))
 	for _, f := range prData.Files {
 		files = append(files, f.Filename)
 	}
 
-	var results []*EvaluationResult
-
+	results := make([]*EvaluationResult, 0)
 	for _, rule := range allRules {
 		slog.DebugContext(ctx, "evaluating rule", "rule_name", rule.Name)
 
@@ -211,10 +211,10 @@ func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.
 	// Call evaluate function
 	evaluateFunc, ok := globals["main"]
 	if !ok {
-		return nil, fmt.Errorf("evaluate function not found in policy")
+		return nil, errors.New("evaluate function not found in policy")
 	}
 
-	var kwargs []starlark.Tuple
+	kwargs := make([]starlark.Tuple, 0, len(rule.Args))
 	for k, v := range rule.Args {
 		val, err := starutil.Marshal(v)
 		if err != nil {
@@ -229,8 +229,13 @@ func (pe *PolicyEngine) evaluateStarlarkPolicy(ctx context.Context, rule *rules.
 		return nil, fmt.Errorf("failed to call evaluate function: %w", err)
 	}
 
+	d, ok := result.(*starlark.Dict)
+	if !ok {
+		return nil, fmt.Errorf("expected Starlark dict as result, got %T", result)
+	}
+
 	// Convert result to Go struct
-	return pe.starlarkDictToEvaluationResult(rule, result.(*starlark.Dict))
+	return pe.starlarkDictToEvaluationResult(rule, d)
 }
 
 var baseCode = `
@@ -269,6 +274,7 @@ func (pe *PolicyEngine) loadProgram(ruleName string) (*starlark.Program, error) 
 	}
 
 	pe.programs[ruleName] = prog
+
 	return prog, nil
 }
 
@@ -290,6 +296,7 @@ func (pe *PolicyEngine) filesToStarlarkList(files []rules.PRFile) *starlark.List
 			continue
 		}
 	}
+
 	return list
 }
 
@@ -309,6 +316,7 @@ func (pe *PolicyEngine) reviewsToStarlarkList(reviews []github.Review) *starlark
 			continue
 		}
 	}
+
 	return list
 }
 

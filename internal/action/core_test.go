@@ -29,7 +29,7 @@ func TestTestSummary(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("with content check", func(t *testing.T) {
-		fd, err := os.CreateTemp("", "summary")
+		fd, err := os.CreateTemp(t.TempDir(), "summary")
 		require.NoError(t, err)
 		name := fd.Name()
 		t.Cleanup(func() {
@@ -48,7 +48,7 @@ func TestTestSummary(t *testing.T) {
 		require.NoError(t, err)
 		err = AddStepSummary("and a new line")
 		require.NoError(t, err)
-		content, err := os.ReadFile(name)
+		content, err := os.ReadFile(name) // #nosec G304 -- test code
 		require.NoError(t, err)
 		assert.Equal(t, "this is the new content\nand a new line\n", string(content))
 	})
@@ -112,7 +112,7 @@ func TestGetInput(t *testing.T) {
 	t.Run("when environment variable is not net", func(t *testing.T) {
 		v, ok := GetInput("some-input with-space")
 		assert.False(t, ok)
-		assert.Equal(t, "", v)
+		assert.Empty(t, v)
 	})
 	t.Run("when environment variable is not net", func(t *testing.T) {
 		t.Setenv("INPUT_SOME-INPUT_WITH-SPACE", " some value that needs to be Trimmed \n")

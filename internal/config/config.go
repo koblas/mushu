@@ -83,7 +83,7 @@ func Load(ctx context.Context, configPath string, flagSet *flag.FlagSet) (*Confi
 	// 3. Load command line flags (highest priority)
 	if flagSet != nil {
 		// Extract flag values and create confmap
-		flagMap := make(map[string]interface{})
+		flagMap := make(map[string]any)
 
 		// Define flag mappings to config paths
 		flagMappings := map[string]string{

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"maps"
+	"slices"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"gopkg.in/yaml.v3"
@@ -94,11 +95,8 @@ func (s *YAMLTeamService) GetUserTeams(ctx context.Context, username string) ([]
 	var teams []string
 
 	for teamName, team := range s.teams {
-		for _, member := range team.Members {
-			if member == username {
-				teams = append(teams, teamName)
-				break
-			}
+		if slices.Contains(team.Members, username) {
+			teams = append(teams, teamName)
 		}
 	}
 

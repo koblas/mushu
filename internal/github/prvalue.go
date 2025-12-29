@@ -13,14 +13,14 @@ type PRValue struct {
 
 var pullURLRE = regexp.MustCompile(`^/([^/]+)/([^/]+)/pull/(\d+)(.*$)`)
 
-func parsePRurl(prURL string) (Repo, int, string, error) {
+func parsePRurl(prURL string) (*GitHubRepo, int, string, error) {
 	if prURL == "" {
 		return nil, 0, "", fmt.Errorf("invalid URL: %q", prURL)
 	}
 
 	u, err := url.Parse(prURL)
 	if err != nil {
-		return nil, 0, "", err
+		return nil, 0, "", fmt.Errorf("parsing URL %q: %w", prURL, err)
 	}
 
 	if u.Scheme != "https" && u.Scheme != "http" {
@@ -39,7 +39,7 @@ func parsePRurl(prURL string) (Repo, int, string, error) {
 	return repo, prNumber, tail, nil
 }
 
-func ParsePRValue(prValue string) (int, Repo, error) {
+func ParsePRValue(prValue string) (int, *GitHubRepo, error) {
 	if repo, prNumber, _, err := parsePRurl(prValue); err == nil {
 		return prNumber, repo, nil
 	}

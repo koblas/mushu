@@ -18,16 +18,16 @@ import (
 //go:embed builtin/*
 var builtin embed.FS
 
-var ErrNotFound = fmt.Errorf("builtin policy not found")
+var ErrNotFound = errors.New("builtin policy not found")
 
 func LoadBuiltin(ctx context.Context, name string) ([]byte, error) {
 	data, err := builtin.ReadFile(path.Join("builtin", name+".star"))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, err
+			return nil, fmt.Errorf("builtin policy %q: %w", name, err)
 		}
 
-		return nil, err
+		return nil, fmt.Errorf("reading builtin policy %q: %w", name, err)
 	}
 
 	return data, nil
@@ -63,9 +63,7 @@ func NewPolicyLoader(fs fs.FS, predeclared starlark.StringDict) *PolicyLoader {
 
 type loaderFunc func(thread *starlark.Thread, module string) (starlark.StringDict, error)
 
-var (
-	ErrLoadCycle = fmt.Errorf("cycle detected in module loading")
-)
+var ErrLoadCycle = errors.New("cycle detected in module loading")
 
 // Additional builtin modules can be added here
 func (l *PolicyLoader) Loader(ctx context.Context) loaderFunc {
@@ -125,12 +123,17 @@ func (l *PolicyLoader) SourceFetch(ctx context.Context, ref Ref) ([]byte, error)
 			logging.Err(err),
 		)
 
-		return nil, err
+		return nil, fmt.Errorf("opening policy file %s: %w", ref.Name, err)
 	}
 
 	defer func() {
 		_ = fd.Close()
 	}()
 
-	return io.ReadAll(fd)
+	b, err := io.ReadAll(fd)
+	if err != nil {
+		return nil, fmt.Errorf("reading policy file: %w", err)
+	}
+
+	return b, nil
 }

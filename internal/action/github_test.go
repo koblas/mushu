@@ -1,7 +1,6 @@
 package action_test
 
 import (
-	"context"
 	"net/http"
 	"testing"
 
@@ -16,11 +15,14 @@ const content = `package toolkit
 `
 
 func TestClient(t *testing.T) {
-	repo, _, err := action.GitHub.Repositories.Get(context.Background(), "actions", "toolkit")
-	assert.NoError(t, err)
+	client, err := action.NewClient(t.Context())
+	require.NoError(t, err)
+
+	repo, _, err := client.Repositories.Get(t.Context(), "actions", "toolkit")
+	require.NoError(t, err)
 	assert.NotNil(t, repo.Owner)
 	assert.NotNil(t, repo.Owner.Login)
-	assert.EqualValues(t, "actions", *repo.Owner.Login)
+	assert.Equal(t, "actions", *repo.Owner.Login)
 }
 
 func TestDownload(t *testing.T) {
@@ -28,7 +30,7 @@ func TestDownload(t *testing.T) {
 		return path == "module.go"
 	}
 
-	files, err := action.DownloadSelectedRepositoryFiles(http.DefaultClient, "actions-go", "toolkit", "09edac1c7d93e0dd7fe5a14dc410fb0b41ea01c4", matcher)
+	files, err := action.DownloadSelectedRepositoryFiles(t.Context(), http.DefaultClient, "actions-go", "toolkit", "09edac1c7d93e0dd7fe5a14dc410fb0b41ea01c4", matcher)
 	require.NoError(t, err)
 	assert.Len(t, files, 1)
 	assert.Equal(t, "module.go", files["module.go"].Path)

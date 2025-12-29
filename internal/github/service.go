@@ -76,16 +76,17 @@ func (gs *Client) GetPRData(ctx context.Context, prNumber int, lookup teams.Look
 
 // extractLabels extracts label names from GitHub labels
 func (gs *Client) extractLabels(labels []*github.Label) []string {
-	var names []string
+	names := make([]string, 0, len(labels))
 	for _, label := range labels {
 		names = append(names, label.GetName())
 	}
+
 	return names
 }
 
 // convertFiles converts GitHub files to internal format
 func (gs *Client) convertFiles(files []*github.CommitFile) []rules.PRFile {
-	var prFiles []rules.PRFile
+	prFiles := make([]rules.PRFile, 0, len(files))
 	for _, file := range files {
 		prFiles = append(prFiles, rules.PRFile{
 			Filename:  file.GetFilename(),
@@ -95,6 +96,7 @@ func (gs *Client) convertFiles(files []*github.CommitFile) []rules.PRFile {
 			Changes:   file.GetChanges(),
 		})
 	}
+
 	return prFiles
 }
 
@@ -115,7 +117,7 @@ func (gs *Client) convertReviews(ctx context.Context, reviews []*github.PullRequ
 		userToTeams[user] = teams
 	}
 
-	var prReviews []Review
+	prReviews := make([]Review, 0, len(reviews))
 	for _, review := range reviews {
 		prReviews = append(prReviews, Review{
 			Reviewer:      review.GetUser().GetLogin(),
@@ -135,10 +137,11 @@ func (gs *Client) extractReviewers(reviews []*github.PullRequestReview) []string
 		reviewerMap[review.GetUser().GetLogin()] = true
 	}
 
-	var reviewers []string
+	reviewers := make([]string, 0, len(reviewerMap))
 	for reviewer := range reviewerMap {
 		reviewers = append(reviewers, reviewer)
 	}
+
 	return reviewers
 }
 
@@ -150,6 +153,7 @@ func (gs *Client) countApprovals(reviews []*github.PullRequestReview) int {
 			count++
 		}
 	}
+
 	return count
 }
 
@@ -159,5 +163,6 @@ func ParsePRNumber(prStr string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid PR number: %s", prStr)
 	}
+
 	return prNumber, nil
 }

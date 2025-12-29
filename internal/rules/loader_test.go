@@ -25,7 +25,7 @@ func TestRuleLoader(t *testing.T) {
 	require.NotEmpty(t, rules, "Expected at least one rule to be loaded")
 
 	// Check that we have the expected rules
-	var ruleNames []string
+	ruleNames := make([]string, 0, len(rules))
 	for _, rule := range rules {
 		ruleNames = append(ruleNames, rule.Name)
 	}
@@ -68,6 +68,7 @@ func (m *mockTeamLookup) GetUserTeams(ctx context.Context, username string) ([]s
 	if m.err != nil {
 		return nil, m.err
 	}
+
 	return m.teams[username], nil
 }
 

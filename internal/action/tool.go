@@ -1,6 +1,8 @@
 package action
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -16,9 +18,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	cachePerms = 0755
-)
+const cachePerms = 0o755
 
 // DownloadToolOptions defines available options to download tools
 type DownloadTool struct {
@@ -29,6 +29,51 @@ type DownloadTool struct {
 
 	Destination string
 	FileMode    os.FileMode
+	httpClient  *http.Client
+}
+
+type DownloadToolOption func(*DownloadTool)
+
+func WithDownloadTmpRoot(root *os.Root) DownloadToolOption {
+	return func(d *DownloadTool) {
+		d.TmpRoot = root
+	}
+}
+
+func WithDownloadCacheRoot(root *os.Root) DownloadToolOption {
+	return func(d *DownloadTool) {
+		d.CacheRoot = root
+	}
+}
+
+func WithDownloadFileMode(mode os.FileMode) DownloadToolOption {
+	return func(d *DownloadTool) {
+		d.FileMode = mode
+	}
+}
+
+func WithDownloadDestination(dest string) DownloadToolOption {
+	return func(d *DownloadTool) {
+		d.Destination = dest
+	}
+}
+
+func WithDownloadHTTPClient(client *http.Client) DownloadToolOption {
+	return func(d *DownloadTool) {
+		d.httpClient = client
+	}
+}
+
+func NewDownloadTool(opts ...DownloadToolOption) *DownloadTool {
+	d := &DownloadTool{
+		httpClient: http.DefaultClient,
+	}
+
+	for _, opt := range opts {
+		opt(d)
+	}
+
+	return d
 }
 
 // CacheOptions defines the available options for tool and file caching
@@ -96,8 +141,9 @@ func (d *DownloadTool) ensureDestDir(dest string) error {
 	root := d.getCacheRoot()
 
 	if err := root.MkdirAll(destDir, cachePerms); err != nil {
-		return fmt.Errorf("unable to create destination directory %s: %v", destDir, err)
+		return fmt.Errorf("unable to create destination directory %s: %w", destDir, err)
 	}
+
 	return nil
 }
 
@@ -105,10 +151,15 @@ func (d *DownloadTool) createEmptyCache(folder string) error {
 	root := d.getCacheRoot()
 
 	if err := root.RemoveAll(folder); err != nil {
-		return err
+		return fmt.Errorf("removing prior incomplete cache %s: %w", folder, err)
 	}
 
-	return root.MkdirAll(folder, cachePerms)
+	err := root.MkdirAll(folder, cachePerms)
+	if err != nil {
+		return fmt.Errorf("creating cache folder %s: %w", folder, err)
+	}
+
+	return nil
 }
 
 func (d *DownloadTool) ensureDestNotExists(dest string) error {
@@ -116,23 +167,28 @@ func (d *DownloadTool) ensureDestNotExists(dest string) error {
 
 	_, err := root.Stat(dest)
 	if err == nil {
-		return fmt.Errorf("already exists")
+		return errors.New("already exists")
 	}
 	if !os.IsNotExist(err) {
-		return err
+		return fmt.Errorf("checking destination %s: %w", dest, err)
 	}
 
 	return nil
 }
 
-func copyURL(dest io.Writer, source string) error {
-	wrapError := func(err error, format string, args ...interface{}) error {
+func (d *DownloadTool) copyURL(ctx context.Context, dest io.Writer, source string) error {
+	wrapError := func(err error, format string, args ...any) error {
 		return fmt.Errorf("failed to download "+source+" "+format+" : %v", append(args, err)...)
 	}
 	if dest == nil {
-		return wrapError(fmt.Errorf("destination should not be null"), "")
+		return wrapError(errors.New("destination should not be null"), "")
 	}
-	resp, err := http.Get(source)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
+	if err != nil {
+		return wrapError(err, "download failed")
+	}
+	resp, err := d.httpClient.Do(req)
 	if err != nil {
 		return wrapError(err, "download failed")
 	}
@@ -144,6 +200,7 @@ func copyURL(dest io.Writer, source string) error {
 	if err != nil {
 		return wrapError(err, "failed to write to destination")
 	}
+
 	return nil
 }
 
@@ -188,7 +245,7 @@ func (c CacheOptions) version() string {
 
 func (c CacheOptions) path() (string, error) {
 	if c.Tool == "" {
-		return "", fmt.Errorf("missing tool name in options.Tool")
+		return "", errors.New("missing tool name in options.Tool")
 	}
 
 	return filepath.Join(c.Tool, c.version(), c.arch()), nil
@@ -200,7 +257,7 @@ type Source struct {
 }
 
 func (d *DownloadTool) cache(source *Source, target string, options CacheOptions) (string, error) {
-	wrapError := func(err error, format string, args ...interface{}) (string, error) {
+	wrapError := func(err error, format string, args ...any) (string, error) {
 		return "", fmt.Errorf("failed to save "+source.Name+" to cache "+format+" : %v", append(args, err)...)
 	}
 
@@ -224,7 +281,10 @@ func (d *DownloadTool) cache(source *Source, target string, options CacheOptions
 	// Ensure provided arguments are namespaced to the destFolder
 	spath := filepath.Join(source.Root.Name(), source.Name)
 	err = filepath.WalkDir(spath, func(path string, info os.DirEntry, err error) error {
-		if info == nil || info.IsDir() || err != nil {
+		if err != nil {
+			return err
+		}
+		if info == nil || info.IsDir() {
 			return nil
 		}
 
@@ -250,21 +310,21 @@ func (d *DownloadTool) cache(source *Source, target string, options CacheOptions
 func (d *DownloadTool) copyToCache(dest, src string) error {
 	stat, err := os.Stat(src)
 	if err != nil {
-		return fmt.Errorf("stat source file %s: %v", src, err)
+		return fmt.Errorf("stat source file %s: %w", src, err)
 	}
-	in, err := os.Open(src)
+	in, err := os.Open(src) // #nosec G304 -- source controlled by code
 	if err != nil {
-		return fmt.Errorf("open source file %s: %v", src, err)
+		return fmt.Errorf("open source file %s: %w", src, err)
 	}
 
 	root := d.getCacheRoot()
 	err = root.MkdirAll(filepath.Dir(dest), cachePerms)
 	if err != nil {
-		return fmt.Errorf("make dest directory %s: %v", filepath.Dir(dest), err)
+		return fmt.Errorf("make dest directory %s: %w", filepath.Dir(dest), err)
 	}
 	out, err := root.Create(dest)
 	if err != nil {
-		return fmt.Errorf("create dest file %s: %v", dest, err)
+		return fmt.Errorf("create dest file %s: %w", dest, err)
 	}
 	_, err = io.Copy(out, in)
 	if err != nil {
@@ -272,7 +332,7 @@ func (d *DownloadTool) copyToCache(dest, src string) error {
 	}
 	err = root.Chmod(dest, stat.Mode())
 	if err != nil {
-		return fmt.Errorf("chmod dest file %s: %v", dest, err)
+		return fmt.Errorf("chmod dest file %s: %w", dest, err)
 	}
 
 	return nil
@@ -298,7 +358,7 @@ func (d *DownloadTool) CacheDir(source *Source, options CacheOptions) (string, e
 // ListAllCachedVersions discovers all versions available in cache
 func (d *DownloadTool) ListAllCachedVersions(options CacheOptions) ([]string, error) {
 	if options.Tool == "" {
-		return nil, fmt.Errorf("missing tool name to list versions in options.Tool")
+		return nil, errors.New("missing tool name to list versions in options.Tool")
 	}
 
 	root := d.getCacheRoot()
@@ -317,7 +377,7 @@ func (d *DownloadTool) ListAllCachedVersions(options CacheOptions) ([]string, er
 
 	dirs, err := rdir.ReadDir(options.Tool)
 	if err != nil {
-		return nil, fmt.Errorf("read cache directory for tool %s: %v", options.Tool, err)
+		return nil, fmt.Errorf("read cache directory for tool %s: %w", options.Tool, err)
 	}
 	for _, dir := range dirs {
 		if !dir.IsDir() {
@@ -345,11 +405,11 @@ func (d *DownloadTool) FindVersion(options CacheOptions) (string, error) {
 	versions := semver.Collection{}
 	constraint, err := semver.NewConstraint(options.Version)
 	if err != nil {
-		return "", fmt.Errorf("invalid version constraint %s: %v", options.Version, err)
+		return "", fmt.Errorf("invalid version constraint %s: %w", options.Version, err)
 	}
 	vinfo, err := d.ListAllCachedVersions(options)
 	if err != nil {
-		return "", fmt.Errorf("list cached versions for tool %s: %v", options.Tool, err)
+		return "", fmt.Errorf("list cached versions for tool %s: %w", options.Tool, err)
 	}
 	for _, v := range vinfo {
 		s, err := semver.NewVersion(v)
@@ -381,10 +441,10 @@ func (d *DownloadTool) FindVersion(options CacheOptions) (string, error) {
 }
 
 // DownloadTool Download a tool from an url and stream it into a file
-func (d *DownloadTool) Download(url string) (*Source, error) {
+func (d *DownloadTool) Download(ctx context.Context, url string) (*Source, error) {
 	root := d.getTmpRoot()
 
-	wrapError := func(err error, format string, args ...interface{}) (*Source, error) {
+	wrapError := func(err error, format string, args ...any) (*Source, error) {
 		return nil, fmt.Errorf(format+" : %v", append(args, err)...)
 	}
 	dest := d.destination()
@@ -399,7 +459,7 @@ func (d *DownloadTool) Download(url string) (*Source, error) {
 	if err != nil {
 		return wrapError(err, "failed to create destination file %s", dest)
 	}
-	if err := copyURL(out, url); err != nil {
+	if err := d.copyURL(ctx, out, url); err != nil {
 		return wrapError(err, "failed to write file %s", dest)
 	}
 	if d.FileMode != 0 {
@@ -416,18 +476,18 @@ func (d *DownloadTool) Download(url string) (*Source, error) {
 }
 
 // GetCachedToolOrDownload returns the path of a cached tool or downloads and caches it
-func (d *DownloadTool) GetCachedToolOrDownload(cache CacheOptions, url string) (string, error) {
+func (d *DownloadTool) GetCachedToolOrDownload(ctx context.Context, cache CacheOptions, url string) (string, error) {
 	if path, err := d.FindVersion(cache); err == nil {
 		return path, nil
 	}
 
-	source, err := d.Download(url)
+	source, err := d.Download(ctx, url)
 	if err != nil {
 		return "", err
 	}
 	path, err := d.CacheFile(source, cache.Tool, cache)
 	if err != nil {
-		return "", fmt.Errorf("failed to cache downloaded tool %v: %v", url, err)
+		return "", fmt.Errorf("failed to cache downloaded tool %v: %w", url, err)
 	}
 
 	return path, nil

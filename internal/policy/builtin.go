@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"fmt"
+
 	"github.com/koblas/mushu/internal/policy/re"
 	"go.starlark.net/starlark"
 )
@@ -15,7 +17,7 @@ func Stdlib() (starlark.StringDict, error) {
 	}
 
 	if value, err := re.LoadModule(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("loading re module: %w", err)
 	} else {
 		union(value)
 	}

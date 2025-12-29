@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Handler struct {
@@ -67,6 +68,7 @@ func (h *Handler) WithGroup(group string) slog.Handler {
 	if h.group != "" {
 		group = h.group + "." + group
 	}
+
 	return &Handler{
 		level: h.level,
 		out:   h.out,
@@ -92,12 +94,12 @@ func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	if _, err := h.out.Write(level); err != nil {
-		return err
+		return fmt.Errorf("write level: %w", err)
 	}
 
 	sep := sepSpace
 	r.Attrs(func(a slog.Attr) bool {
-		if _, err := h.out.Write([]byte(sep)); err != nil {
+		if _, err := h.out.Write(sep); err != nil {
 			return false
 		}
 		sep = sepComma
@@ -110,15 +112,15 @@ func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
 	})
 
 	if _, err := h.out.Write(delim); err != nil {
-		return err
+		return fmt.Errorf("write delim: %w", err)
 	}
 
 	if _, err := h.out.Write([]byte(commandReplacer.Replace(r.Message))); err != nil {
-		return err
+		return fmt.Errorf("write message: %w", err)
 	}
 
 	if _, err := h.out.Write([]byte("\n")); err != nil {
-		return err
+		return fmt.Errorf("write newline: %w", err)
 	}
 
 	return nil
@@ -139,22 +141,21 @@ func writeAttr(w io.Writer, a slog.Attr, group string) error {
 		}
 
 		return nil
-
 	}
 
 	if group != "" {
 		if _, err := w.Write([]byte(replacer.Replace(group))); err != nil {
-			return err
+			return fmt.Errorf("write group: %w", err)
 		}
 		if _, err := w.Write([]byte(".")); err != nil {
-			return err
+			return fmt.Errorf("write group sep: %w", err)
 		}
 	}
 	if _, err := w.Write([]byte(replacer.Replace(key))); err != nil {
-		return err
+		return fmt.Errorf("write key: %w", err)
 	}
 	if _, err := w.Write([]byte("=")); err != nil {
-		return err
+		return fmt.Errorf("write equal: %w", err)
 	}
 
 	if value.Kind() == slog.KindLogValuer {
@@ -177,9 +178,15 @@ func writeAttr(w io.Writer, a slog.Attr, group string) error {
 		_, err = w.Write([]byte(replacer.Replace(value.String())))
 	case slog.KindUint64:
 		_, err = w.Write([]byte(strconv.FormatUint(value.Uint64(), 10)))
+	case slog.KindTime:
+		_, err = w.Write([]byte(value.Time().Format(time.RFC3339Nano)))
 	case slog.KindGroup, slog.KindLogValuer:
 		// handled
 	}
 
-	return err
+	if err != nil {
+		return fmt.Errorf("write value: %v: %w", value.Any(), err)
+	}
+
+	return nil
 }

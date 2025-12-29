@@ -117,9 +117,9 @@ func TestUnmarshal_List(t *testing.T) {
 		result, err := starutil.Unmarshal(input)
 		require.NoError(t, err)
 
-		slice, ok := result.([]interface{})
+		slice, ok := result.([]any)
 		require.True(t, ok)
-		assert.Equal(t, 0, len(slice))
+		assert.Empty(t, slice)
 	})
 
 	t.Run("list of strings", func(t *testing.T) {
@@ -131,9 +131,9 @@ func TestUnmarshal_List(t *testing.T) {
 		result, err := starutil.Unmarshal(input)
 		require.NoError(t, err)
 
-		slice, ok := result.([]interface{})
+		slice, ok := result.([]any)
 		require.True(t, ok)
-		assert.Equal(t, 3, len(slice))
+		assert.Len(t, slice, 3)
 		assert.Equal(t, "a", slice[0])
 		assert.Equal(t, "b", slice[1])
 		assert.Equal(t, "c", slice[2])
@@ -148,9 +148,9 @@ func TestUnmarshal_List(t *testing.T) {
 		result, err := starutil.Unmarshal(input)
 		require.NoError(t, err)
 
-		slice, ok := result.([]interface{})
+		slice, ok := result.([]any)
 		require.True(t, ok)
-		assert.Equal(t, 3, len(slice))
+		assert.Len(t, slice, 3)
 		assert.Equal(t, 1, slice[0])
 		assert.Equal(t, 2, slice[1])
 		assert.Equal(t, 3, slice[2])
@@ -166,13 +166,13 @@ func TestUnmarshal_List(t *testing.T) {
 		result, err := starutil.Unmarshal(input)
 		require.NoError(t, err)
 
-		slice, ok := result.([]interface{})
+		slice, ok := result.([]any)
 		require.True(t, ok)
-		assert.Equal(t, 4, len(slice))
+		assert.Len(t, slice, 4)
 		assert.Equal(t, "string", slice[0])
 		assert.Equal(t, 42, slice[1])
 		assert.Equal(t, true, slice[2])
-		assert.InDelta(t, 3.14, slice[3].(float64), 0.001)
+		assert.InDelta(t, 3.14, slice[3], 0.001)
 	})
 }
 
@@ -182,9 +182,9 @@ func TestUnmarshal_Tuple(t *testing.T) {
 		result, err := starutil.Unmarshal(input)
 		require.NoError(t, err)
 
-		slice, ok := result.([]interface{})
+		slice, ok := result.([]any)
 		require.True(t, ok)
-		assert.Equal(t, 0, len(slice))
+		assert.Empty(t, slice)
 	})
 
 	t.Run("tuple of values", func(t *testing.T) {
@@ -196,9 +196,9 @@ func TestUnmarshal_Tuple(t *testing.T) {
 		result, err := starutil.Unmarshal(input)
 		require.NoError(t, err)
 
-		slice, ok := result.([]interface{})
+		slice, ok := result.([]any)
 		require.True(t, ok)
-		assert.Equal(t, 3, len(slice))
+		assert.Len(t, slice, 3)
 		assert.Equal(t, "a", slice[0])
 		assert.Equal(t, 1, slice[1])
 		assert.Equal(t, true, slice[2])
@@ -213,7 +213,7 @@ func TestUnmarshal_Dict_StringKeys(t *testing.T) {
 
 		dict, ok := result.(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, 0, len(dict))
+		assert.Empty(t, dict)
 	})
 
 	t.Run("string keys", func(t *testing.T) {
@@ -228,7 +228,7 @@ func TestUnmarshal_Dict_StringKeys(t *testing.T) {
 
 		dict, ok := result.(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, 2, len(dict))
+		assert.Len(t, dict, 2)
 		assert.Equal(t, "Alice", dict["name"])
 		assert.Equal(t, 30, dict["age"])
 	})
@@ -271,7 +271,7 @@ func TestUnmarshal_Dict_MixedKeys(t *testing.T) {
 
 	dict, ok := result.(map[any]any)
 	require.True(t, ok)
-	assert.Equal(t, 3, len(dict))
+	assert.Len(t, dict, 3)
 	assert.Equal(t, "value1", dict["string_key"])
 	assert.Equal(t, "value2", dict[42])
 	assert.Equal(t, "value3", dict[true])
@@ -303,9 +303,9 @@ func TestUnmarshal_NestedStructures(t *testing.T) {
 	dict, ok := result.(map[string]any)
 	require.True(t, ok)
 
-	users, ok := dict["users"].([]interface{})
+	users, ok := dict["users"].([]any)
 	require.True(t, ok)
-	assert.Equal(t, 2, len(users))
+	assert.Len(t, users, 2)
 
 	firstUser, ok := users[0].(map[string]any)
 	require.True(t, ok)

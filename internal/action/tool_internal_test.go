@@ -19,24 +19,25 @@ func buildTestTool(t *testing.T) *DownloadTool {
 
 	rooter := func(path string) *os.Root {
 		p := filepath.Join(t.TempDir(), path)
-		err := os.Mkdir(p, 0755)
+		err := os.Mkdir(p, 0o755) // #nosec G301 -- test code
 		require.NoError(t, err)
+
 		r, err := os.OpenRoot(p)
 		require.NoError(t, err)
 
 		return r
 	}
 
-	return &DownloadTool{
-		TmpRoot:   rooter("_temp"),
-		CacheRoot: rooter("_cache"),
-	}
+	return NewDownloadTool(
+		WithDownloadTmpRoot(rooter("_temp")),
+		WithDownloadCacheRoot(rooter("_cache")),
+	)
 }
 
 func TestEnsureDestDir(t *testing.T) {
 	d := buildTestTool(t)
 
-	assert.NoError(t, d.ensureDestDir(""))
+	require.NoError(t, d.ensureDestDir(""))
 
 	dir := uuid.New().String()
 
@@ -52,7 +53,7 @@ func TestEnsureDestNotExists(t *testing.T) {
 	require.NoError(t, err)
 	_ = fd.Close()
 
-	assert.NoError(t, d.ensureDestNotExists("sone-non-existing-file"))
+	require.NoError(t, d.ensureDestNotExists("sone-non-existing-file"))
 	assert.Error(t, d.ensureDestNotExists(name))
 }
 
@@ -63,7 +64,7 @@ func TestToolPath(t *testing.T) {
 		Arch:    "arch",
 	}
 	path, err := options.path()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(
 		t,
 		filepath.Join("some-tool", "version", "arch"),
@@ -78,11 +79,11 @@ func TestCacheFile(t *testing.T) {
 	require.NoError(t, err)
 
 	path, err := d.CacheFile(&Source{Root: root, Name: "tool.go"}, "my-tool.go", CacheOptions{})
-	assert.Error(t, err)
-	assert.Equal(t, "", path)
+	require.Error(t, err)
+	assert.Empty(t, path)
 
 	path, err = d.CacheFile(&Source{Root: root, Name: "tool.go"}, "my-tool.go", CacheOptions{Tool: "some-tool", Version: "0.1.0"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	// assert.Equal(t, filepath.Join(cacheRoot, "some-tool", "0.1.0"), path)
 	assert.FileExists(t, path)
 
@@ -158,17 +159,18 @@ func TestCopyURL(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(data)) }))
 	defer s.Close()
 	b := bytes.NewBuffer(nil)
-	assert.NoError(t, copyURL(b, s.URL))
+	d := NewDownloadTool()
+	require.NoError(t, d.copyURL(t.Context(), b, s.URL))
 	assert.Equal(t, data, b.String())
 
-	assert.Error(t, copyURL(nil, s.URL))
+	require.Error(t, d.copyURL(t.Context(), nil, s.URL))
 
-	assert.Error(t, copyURL(b, "this is not a URL"))
+	require.Error(t, d.copyURL(t.Context(), b, "this is not a URL"))
 
-	assert.Error(t, copyURL(writerInError{}, s.URL))
+	require.Error(t, d.copyURL(t.Context(), writerInError{}, s.URL))
 
 	s.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotAcceptable) })
-	assert.Error(t, copyURL(bytes.NewBuffer(nil), s.URL))
+	assert.Error(t, d.copyURL(t.Context(), bytes.NewBuffer(nil), s.URL))
 }
 
 type writerInError struct{}

@@ -17,6 +17,7 @@ type ActionRepo struct {
 
 type ActionIssue struct {
 	ActionRepo
+
 	Number int
 }
 
@@ -219,7 +220,7 @@ func issueFromEvent(event any, repo ActionRepo) ActionIssue {
 	}
 }
 
-// ParseActionEnv parses the environemnt and extracts the ActionContext on demand. For example in tests
+// ParseActionEnv parses the environment and extracts the ActionContext on demand. For example in tests
 func ParseActionEnv() (ActionContext, error) {
 	repo := ActionRepo{}
 	repoSet := false
@@ -237,9 +238,8 @@ func ParseActionEnv() (ActionContext, error) {
 	eventPath := os.Getenv("GITHUB_EVENT_PATH")
 	if eventPath == "" {
 		return ActionContext{}, errors.New("gogithub_EVENT_PATH is not set")
-
 	}
-	payload, err := os.ReadFile(eventPath)
+	payload, err := os.ReadFile(eventPath) // #nosec G304 -- controlled by environment
 	if err != nil {
 		return ActionContext{}, fmt.Errorf("could not read gogithub_EVENT_PATH=%q file: %w", eventPath, err)
 	}
@@ -266,6 +266,7 @@ func ParseActionEnv() (ActionContext, error) {
 		if !ok {
 			return def
 		}
+
 		return val
 	}
 

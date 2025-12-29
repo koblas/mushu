@@ -11,17 +11,20 @@ import (
 )
 
 // Unmarshal decodes a starlark.Value into it's golang counterpart
-func Unmarshal(x starlark.Value) (interface{}, error) {
+func Unmarshal(x starlark.Value) (any, error) {
 	switch v := x.(type) {
 	case starlark.NoneType:
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	case starlark.Bool:
 		return v.Truth() == starlark.True, nil
 	case starlark.Int:
 		var tmp int
 		err := starlark.AsInt(x, &tmp)
+		if err != nil {
+			return 0, fmt.Errorf("unmarshaling starlark int: %w", err)
+		}
 
-		return tmp, err
+		return tmp, nil
 	case starlark.Float:
 		f, ok := starlark.AsFloat(x)
 		if !ok {
@@ -44,7 +47,7 @@ func Unmarshal(x starlark.Value) (interface{}, error) {
 			for key, val := range starlark.Entries(v) {
 				strKey, ok := key.(starlark.String)
 				if !ok {
-					return nil, fmt.Errorf("unmarshaling starlark dict key to string")
+					return nil, errors.New("unmarshaling starlark dict key to string")
 				}
 
 				dictVal, err := Unmarshal(val)
@@ -75,7 +78,7 @@ func Unmarshal(x starlark.Value) (interface{}, error) {
 
 		return result, nil
 	case *starlark.List:
-		value := make([]interface{}, 0, v.Len())
+		value := make([]any, 0, v.Len())
 		for val := range starlark.Elements(v) {
 			val, err := Unmarshal(val)
 			if err != nil {
@@ -86,7 +89,7 @@ func Unmarshal(x starlark.Value) (interface{}, error) {
 
 		return value, nil
 	case starlark.Tuple:
-		value := make([]interface{}, 0, v.Len())
+		value := make([]any, 0, v.Len())
 		for val := range starlark.Elements(v) {
 			val, err := Unmarshal(val)
 			if err != nil {

@@ -33,8 +33,9 @@ func (s *CompositeTeamService) GetUserTeams(ctx context.Context, username string
 		githubTeams, err := s.githubService.GetUserTeams(ctx, username)
 		if err != nil {
 			// If GitHub fails, return YAML results (even if empty)
-			return teams, nil
+			return teams, nil //nolint:nilerr
 		}
+
 		return githubTeams, nil
 	}
 
@@ -54,8 +55,9 @@ func (s *CompositeTeamService) GetTeamMembers(ctx context.Context, teamSlug stri
 		githubMembers, err := s.githubService.GetTeamMembers(ctx, teamSlug)
 		if err != nil {
 			// If GitHub fails, return YAML results (even if empty)
-			return members, nil
+			return members, nil //nolint:nilerr
 		}
+
 		return githubMembers, nil
 	}
 

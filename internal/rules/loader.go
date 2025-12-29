@@ -64,6 +64,7 @@ type RuleWhenContributor struct {
 // RuleLoader handles loading and inheritance of rules
 type RuleLoader struct {
 	RuleBase
+
 	// the sub directory to load rules from
 	dir string
 }
@@ -220,7 +221,7 @@ func matchContributor(ctx context.Context, contributor *RuleWhenContributor, prD
 	// Check if author belongs to any of the specified teams
 	if len(contributor.Teams) > 0 {
 		if teamLookup == nil {
-			return false, fmt.Errorf("team lookup required but not provided")
+			return false, errors.New("team lookup required but not provided")
 		}
 
 		authorTeams, err := teamLookup.GetUserTeams(ctx, prData.GetAuthor())
@@ -232,6 +233,7 @@ func matchContributor(ctx context.Context, contributor *RuleWhenContributor, prD
 		for _, team := range contributor.Teams {
 			if slices.Contains(authorTeams, team) {
 				found = true
+
 				break
 			}
 		}
@@ -251,6 +253,7 @@ func matchPattern(value string, patterns []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 

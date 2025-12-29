@@ -31,7 +31,7 @@ func randomString(n int) string {
 
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
+		b[i] = letters[rand.Intn(len(letters))] // #nosec G404
 	}
 
 	return string(b)
@@ -52,7 +52,7 @@ func multilineOutput(name, value string) string {
 	return builder.String()
 }
 
-// ExportVariable sets the environment varaible name (for this action and future actions)
+// ExportVariable sets the environment variable name (for this action and future actions)
 func ExportVariable(name, value string) {
 	if err := issueFileCommand(GitHubExportEnvFilePathEnvName, multilineOutput(name, value)); err != nil {
 		IssueCommand("set-env", map[string]string{"name": name}, value)
@@ -110,7 +110,7 @@ func SetOutput(name, value string) {
 }
 
 // SetFailedf sets the action status to failed and sets an error message
-func SetFailedf(format string, args ...interface{}) {
+func SetFailedf(format string, args ...any) {
 	SetFailed(fmt.Sprintf(format, args...))
 }
 
@@ -194,9 +194,9 @@ func IsDebug() bool {
 // see: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#adding-a-job-summary
 func AddStepSummary(summary string) error {
 	// os.O_CREATE: If pathname does not exist, create it as a regular file.
-	err := issueFileCommandWithPerm(GitHubSummaryPathEnvName, summary, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0644)
+	err := issueFileCommandWithPerm(GitHubSummaryPathEnvName, summary, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o644)
 	if err != nil {
-		return fmt.Errorf("add step summary: %v", err)
+		return fmt.Errorf("add step summary: %w", err)
 	}
 
 	return nil
@@ -208,7 +208,7 @@ func ReplaceStepSummary(summary string) error {
 	// os.O_CREATE: If pathname does not exist, create it as a regular file.
 	err := issueFileCommandWithPerm(GitHubSummaryPathEnvName, summary, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0)
 	if err != nil {
-		return fmt.Errorf("replace step summary: %v", err)
+		return fmt.Errorf("replace step summary: %w", err)
 	}
 
 	return nil
@@ -221,10 +221,10 @@ func DeleteStepSummary() error {
 	if ok {
 		err := os.Remove(path)
 		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("delete step summary: %v", err)
+			return fmt.Errorf("delete step summary: %w", err)
 		}
 	} else {
-		logger.Info(fmt.Sprintf("unable to find command file %s", GitHubSummaryPathEnvName))
+		logger.Info("unable to find command file " + GitHubSummaryPathEnvName)
 	}
 
 	return nil

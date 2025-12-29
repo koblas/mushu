@@ -9,7 +9,7 @@ import (
 )
 
 // Marshal turns go values into starlark types
-func Marshal(data any) (starlark.Value, error) {
+func Marshal(data any) (starlark.Value, error) { //nolint:ireturn
 	switch x := data.(type) {
 	case starlark.Value:
 		return x, nil
@@ -54,15 +54,17 @@ func Marshal(data any) (starlark.Value, error) {
 		for i, val := range x {
 			elems[i] = starlark.String(val)
 		}
+
 		return starlark.NewList(elems), nil
 	case []int:
 		elems := make([]starlark.Value, len(x))
 		for i, val := range x {
 			elems[i] = starlark.MakeInt(val)
 		}
+
 		return starlark.NewList(elems), nil
 	case []any:
-		var elems = make([]starlark.Value, len(x))
+		elems := make([]starlark.Value, len(x))
 		for i, val := range x {
 			v, err := Marshal(val)
 			if err != nil {
@@ -70,6 +72,7 @@ func Marshal(data any) (starlark.Value, error) {
 			}
 			elems[i] = v
 		}
+
 		return starlark.NewList(elems), nil
 	case map[any]any:
 		dict := starlark.NewDict(len(x))
@@ -77,38 +80,41 @@ func Marshal(data any) (starlark.Value, error) {
 			var key starlark.Value
 			key, err := Marshal(ki)
 			if err != nil {
-				return starlark.None, err
+				return starlark.None, fmt.Errorf("marshaling map key %v: %w", ki, err)
 			}
 
 			elem, err := Marshal(val)
 			if err != nil {
-				return starlark.None, err
+				return starlark.None, fmt.Errorf("marshaling value %v: %w", val, err)
 			}
 			if err := dict.SetKey(key, elem); err != nil {
-				return starlark.None, err
+				return starlark.None, fmt.Errorf("setting dict key %v: %w", key, err)
 			}
 		}
+
 		return dict, nil
 	case map[string]string:
 		dict := starlark.NewDict(len(x))
 		for key, val := range x {
 			elem := starlark.String(val)
 			if err := dict.SetKey(starlark.String(key), elem); err != nil {
-				return starlark.None, err
+				return starlark.None, fmt.Errorf("setting dict key %s: %w", key, err)
 			}
 		}
+
 		return dict, nil
 	case map[string]any:
 		dict := starlark.NewDict(len(x))
 		for key, val := range x {
 			elem, err := Marshal(val)
 			if err != nil {
-				return starlark.None, err
+				return starlark.None, fmt.Errorf("marshaling map key %s: %w", key, err)
 			}
 			if err = dict.SetKey(starlark.String(key), elem); err != nil {
-				return starlark.None, err
+				return starlark.None, fmt.Errorf("setting dict key %s: %w", key, err)
 			}
 		}
+
 		return dict, nil
 	// case Marshaler:
 	// v, err = x.MarshalStarlark()

@@ -14,6 +14,7 @@ import (
 // CodeRulesFinder handles discovery of CODERULES files
 type CodeRulesFinder struct {
 	RuleBase
+
 	prFiles []PRFile
 }
 

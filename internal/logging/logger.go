@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -23,7 +24,12 @@ func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
 		}
 	}
 
-	return h.next.Handle(ctx, r)
+	err := h.next.Handle(ctx, r)
+	if err != nil {
+		return fmt.Errorf("handling slog record: %w", err)
+	}
+
+	return nil
 }
 
 func (h *ContextHandler) Enabled(ctx context.Context, lvl slog.Level) bool {

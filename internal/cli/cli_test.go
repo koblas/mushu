@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/koblas/mushu/internal/cli"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateCommand_MissingPRNumber(t *testing.T) {
@@ -70,7 +70,7 @@ func TestValidateCommand_InvalidPRNumber(t *testing.T) {
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	if err != nil && !strings.Contains(err.Error(), "invalid") && !strings.Contains(err.Error(), "parsing") {
 		t.Errorf("Expected error message about invalid PR number, got: %v", err)
@@ -99,7 +99,6 @@ func TestValidateCommand_WithPRNumber(t *testing.T) {
 
 	// Run Execute
 	err := cli.Execute(ctx, args)
-
 	// This may fail due to missing config or GitHub API errors
 	// but we're mainly testing that the command structure works
 	if err != nil {
@@ -293,7 +292,6 @@ func TestGlobalFlags(t *testing.T) {
 
 	// Run Execute - should not error
 	err := cli.Execute(ctx, args)
-
 	if err != nil {
 		t.Errorf("Expected no error with global flags, got: %v", err)
 	}

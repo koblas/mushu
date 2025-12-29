@@ -25,13 +25,14 @@ type Client struct {
 
 func createGitHubClient(ctx context.Context, token string, repo Repo) (*github.Client, error) {
 	if token == "" {
-		return nil, fmt.Errorf("GitHub token is required")
+		return nil, errors.New("GitHub token is required")
 	}
 
 	host := repo.RepoHost()
 
 	client := github.NewClient(nil)
-	if token != "${GITHUB_TOKEN}" && token != "GITHUB_TOKEN" {
+	validToken := token != "${GITHUB_TOKEN}" && token != "GITHUB_TOKEN" // #nosec G101
+	if validToken {
 		client = client.WithAuthToken(token)
 	}
 	if host != "github.com" {

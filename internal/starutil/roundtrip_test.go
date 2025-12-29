@@ -26,10 +26,10 @@ func TestRoundTrip(t *testing.T) {
 		{"negative int", -42, nil},
 		{"zero", 0, nil},
 		{"float", 3.14159, nil},
-		{"string slice", []string{"a", "b", "c"}, []interface{}{"a", "b", "c"}},
-		{"empty string slice", []string{}, []interface{}{}},
-		{"int slice", []int{1, 2, 3}, []interface{}{1, 2, 3}},
-		{"empty int slice", []int{}, []interface{}{}},
+		{"string slice", []string{"a", "b", "c"}, []any{"a", "b", "c"}},
+		{"empty string slice", []string{}, []any{}},
+		{"int slice", []int{1, 2, 3}, []any{1, 2, 3}},
+		{"empty int slice", []int{}, []any{}},
 		{"map string to string", map[string]string{"key": "value"}, map[string]any{"key": "value"}},
 		{"empty map", map[string]string{}, map[string]any{}},
 	}
@@ -74,7 +74,7 @@ func TestRoundTrip_ComplexStructures(t *testing.T) {
 		assert.Equal(t, "Alice", resultMap["name"])
 		assert.Equal(t, 30, resultMap["age"])
 		assert.Equal(t, true, resultMap["active"])
-		assert.InDelta(t, 95.5, resultMap["score"].(float64), 0.001)
+		assert.InDelta(t, 95.5, resultMap["score"], 0.001)
 	})
 
 	t.Run("nested maps", func(t *testing.T) {
@@ -119,9 +119,9 @@ func TestRoundTrip_ComplexStructures(t *testing.T) {
 		result, err := starutil.Unmarshal(starlarkVal)
 		require.NoError(t, err)
 
-		resultSlice, ok := result.([]interface{})
+		resultSlice, ok := result.([]any)
 		require.True(t, ok)
-		assert.Equal(t, 2, len(resultSlice))
+		assert.Len(t, resultSlice, 2)
 
 		first, ok := resultSlice[0].(map[string]any)
 		require.True(t, ok)
@@ -144,16 +144,16 @@ func TestRoundTrip_ComplexStructures(t *testing.T) {
 		resultMap, ok := result.(map[string]any)
 		require.True(t, ok)
 
-		numbers, ok := resultMap["numbers"].([]interface{})
+		numbers, ok := resultMap["numbers"].([]any)
 		require.True(t, ok)
-		assert.Equal(t, 3, len(numbers))
+		assert.Len(t, numbers, 3)
 		assert.Equal(t, 1, numbers[0])
 		assert.Equal(t, 2, numbers[1])
 		assert.Equal(t, 3, numbers[2])
 
-		words, ok := resultMap["words"].([]interface{})
+		words, ok := resultMap["words"].([]any)
 		require.True(t, ok)
-		assert.Equal(t, 3, len(words))
+		assert.Len(t, words, 3)
 		assert.Equal(t, "a", words[0])
 		assert.Equal(t, "b", words[1])
 		assert.Equal(t, "c", words[2])
@@ -185,9 +185,9 @@ func TestRoundTrip_SpecialCases(t *testing.T) {
 		result, err := starutil.Unmarshal(starlarkVal)
 		require.NoError(t, err)
 
-		resultSlice, ok := result.([]interface{})
+		resultSlice, ok := result.([]any)
 		require.True(t, ok)
-		assert.Equal(t, 3, len(resultSlice))
+		assert.Len(t, resultSlice, 3)
 		assert.Equal(t, "value", resultSlice[0])
 		assert.Nil(t, resultSlice[1])
 		assert.Equal(t, "another", resultSlice[2])

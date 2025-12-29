@@ -6,6 +6,7 @@ import (
 
 	"github.com/koblas/mushu/internal/rules"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFindCodeRulesForPR(t *testing.T) {
@@ -97,7 +98,7 @@ func TestFindCodeRulesForPR(t *testing.T) {
 			assert.Len(t, loaded, tt.expectedCount, "number of CODERULES files")
 
 			rules, err := finder.RulesForPath(tt.prFiles[0].Filename, loaded)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			var paths []string
 			for _, cr := range rules {

@@ -1,4 +1,52 @@
 version: "2"
 
+issues:
+  max-same-issues: 0
+
 linters:
-  default: standard
+  default: all
+  # enable:
+  #   - govet # standard
+  #   - errcheck # standard
+  #   - staticcheck # standard
+  #   - unused # standard
+  #   - ineffassign # standard
+  #   - misspell
+  settings:
+    nolintlint:
+      require-explanation: false
+
+  disable:
+    - cyclop
+    - depguard
+    # - err113
+    - exhaustruct
+    - funcorder
+    - funlen
+    - gochecknoglobals
+    - gocognit
+    - gocritic
+    - gocyclo
+    - godoclint
+    - godot
+    - godox
+    - gosmopolitan
+    - lll
+    - maintidx
+    - mirror
+    - mnd
+    - nestif
+    - noinlineerr
+    - paralleltest
+    - revive
+    - tagliatelle
+    - testpackage
+    - unparam #maybe
+    - varnamelen
+    - wsl # deprecated use wsl_v5
+    - wsl_v5
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports

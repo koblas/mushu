@@ -1,4 +1,4 @@
-package teams
+package teams_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/koblas/mushu/internal/teams"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +17,7 @@ func TestYAMLTeamService_Load(t *testing.T) {
 		name      string
 		fsys      fs.FS
 		teamsFile string
-		wantTeams map[string]Team
+		wantTeams map[string]teams.Team
 		wantError bool
 		errorType string
 	}{
@@ -40,7 +41,7 @@ teams:
 				},
 			},
 			teamsFile: "teams.yaml",
-			wantTeams: map[string]Team{
+			wantTeams: map[string]teams.Team{
 				"frontend": {
 					Description: "Frontend developers",
 					Members:     []string{"alice", "bob"},
@@ -77,7 +78,7 @@ teams:
 				},
 			},
 			teamsFile: "teams/*",
-			wantTeams: map[string]Team{
+			wantTeams: map[string]teams.Team{
 				"frontend": {
 					Description: "Frontend developers",
 					Members:     []string{"alice", "bob"},
@@ -113,7 +114,7 @@ teams:
 				},
 			},
 			teamsFile: "{teams.yaml,teams/*}",
-			wantTeams: map[string]Team{
+			wantTeams: map[string]teams.Team{
 				"main": {
 					Description: "Main team",
 					Members:     []string{"admin"},
@@ -129,14 +130,14 @@ teams:
 			name:      "missing teams file - should not error",
 			fsys:      fstest.MapFS{},
 			teamsFile: "nonexistent.yaml",
-			wantTeams: map[string]Team{},
+			wantTeams: map[string]teams.Team{},
 			wantError: false,
 		},
 		{
 			name:      "missing teams directory - should not error",
 			fsys:      fstest.MapFS{},
 			teamsFile: "nonexistant/*",
-			wantTeams: map[string]Team{},
+			wantTeams: map[string]teams.Team{},
 			wantError: false,
 		},
 		{
@@ -147,7 +148,7 @@ teams:
 				},
 			},
 			teamsFile: "teams.yaml",
-			wantTeams: map[string]Team{},
+			wantTeams: map[string]teams.Team{},
 			wantError: true,
 			errorType: "parse",
 		},
@@ -159,7 +160,7 @@ teams:
 				},
 			},
 			teamsFile: "teams.yaml",
-			wantTeams: map[string]Team{},
+			wantTeams: map[string]teams.Team{},
 			wantError: false,
 		},
 		{
@@ -170,14 +171,14 @@ teams:
 				},
 			},
 			teamsFile: "teams.yaml",
-			wantTeams: map[string]Team{},
+			wantTeams: map[string]teams.Team{},
 			wantError: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := NewYAMLTeamService(tt.fsys, tt.teamsFile)
+			service := teams.NewYAMLTeamService(tt.fsys, tt.teamsFile)
 
 			err := service.Load(t.Context())
 
@@ -190,7 +191,7 @@ teams:
 				require.NoError(t, err)
 			}
 
-			assert.Equal(t, tt.wantTeams, service.teams)
+			assert.Equal(t, tt.wantTeams, service.Teams())
 		})
 	}
 }
@@ -218,7 +219,7 @@ teams:
 		},
 	}
 
-	service := NewYAMLTeamService(fsys, "teams.yaml")
+	service := teams.NewYAMLTeamService(fsys, "teams.yaml")
 	err := service.Load(context.Background())
 	require.NoError(t, err)
 
@@ -281,7 +282,7 @@ teams:
 		},
 	}
 
-	service := NewYAMLTeamService(fsys, "teams.yaml")
+	service := teams.NewYAMLTeamService(fsys, "teams.yaml")
 	err := service.Load(context.Background())
 	require.NoError(t, err)
 
@@ -335,7 +336,7 @@ teams:
 		},
 	}
 
-	service := NewYAMLTeamService(fsys, "teams.yaml")
+	service := teams.NewYAMLTeamService(fsys, "teams.yaml")
 	err := service.Load(context.Background())
 	require.NoError(t, err)
 
@@ -381,12 +382,12 @@ teams:
 		},
 	}
 
-	service := NewYAMLTeamService(fsys, "{teams.yaml,teams/*.yaml}")
+	service := teams.NewYAMLTeamService(fsys, "{teams.yaml,teams/*.yaml}")
 	err := service.Load(context.Background())
 	require.NoError(t, err)
 
 	// Should have teams from both main file and directory
-	expectedTeams := map[string]Team{
+	expectedTeams := map[string]teams.Team{
 		"main": {
 			Description: "Main team",
 			Members:     []string{"admin"},
@@ -401,7 +402,7 @@ teams:
 		},
 	}
 
-	assert.Equal(t, expectedTeams, service.teams)
+	assert.Equal(t, expectedTeams, service.Teams())
 }
 
 func TestYAMLTeamService_LoadWithOverlappingTeams(t *testing.T) {
@@ -428,15 +429,15 @@ teams:
 		},
 	}
 
-	service := NewYAMLTeamService(fsys, "{teams.yaml,teams/*}")
+	service := teams.NewYAMLTeamService(fsys, "{teams.yaml,teams/*}")
 	err := service.Load(context.Background())
 	require.NoError(t, err)
 
 	// Directory files should override main file (loaded later)
-	expectedTeam := Team{
+	expectedTeam := teams.Team{
 		Description: "Shared team from directory",
 		Members:     []string{"charlie", "diana"},
 	}
 
-	assert.Equal(t, expectedTeam, service.teams["shared"])
+	assert.Equal(t, expectedTeam, service.Teams()["shared"])
 }

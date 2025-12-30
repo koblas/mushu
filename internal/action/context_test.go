@@ -1,9 +1,10 @@
-package action
+package action_test
 
 import (
 	"testing"
 
 	"github.com/gkampitakis/go-snaps/snaps"
+	"github.com/koblas/mushu/internal/action"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +33,7 @@ func TestContext(t *testing.T) {
 			t.Setenv("GITHUB_WORKFLOW", "CI")
 			t.Setenv("GITHUB_WORKSPACE", "/home/runner/work/actions-playground/actions-playground")
 			t.Setenv("GITHUB_EVENT_PATH", path)
-			act, err := ParseActionEnv()
+			act, err := action.ParseActionEnv()
 			require.NoError(t, err)
 
 			snaps.MatchSnapshot(t, path, act)

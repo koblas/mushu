@@ -49,7 +49,7 @@ func ContextWith(ctx context.Context, attr ...slog.Attr) context.Context {
 		return context.WithValue(ctx, fieldsKey{}, append(v, attr...))
 	}
 
-	return context.WithValue(ctx, fieldsKey{}, attr[:])
+	return context.WithValue(ctx, fieldsKey{}, attr)
 }
 
 // New creates a new logger with the specified level and format

@@ -210,7 +210,12 @@ func matchFiles(fileCondition *RuleWhenFile, files []string) (bool, error) {
 }
 
 // matchContributor checks if contributor conditions are met
-func matchContributor(ctx context.Context, contributor *RuleWhenContributor, prData PRData, teamLookup TeamLookup) (bool, error) {
+func matchContributor(
+	ctx context.Context,
+	contributor *RuleWhenContributor,
+	prData PRData,
+	teamLookup TeamLookup,
+) (bool, error) {
 	// Check if author is in the users list
 	if len(contributor.Users) > 0 {
 		if !slices.Contains(contributor.Users, prData.GetAuthor()) {

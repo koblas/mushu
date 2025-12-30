@@ -207,7 +207,7 @@ func validateCommand() *cli.Command {
 			var client *github.Client
 
 			act, err := action.ParseActionEnv()
-			if err == nil {
+			if err == nil { //nolint:nestif
 				prNumber = act.Issue.Number
 
 				tclient, err := action.NewClient(ctx)

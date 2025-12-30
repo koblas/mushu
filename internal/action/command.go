@@ -44,10 +44,10 @@ func issueFileCommandWithPerm(command string, message string, flag int, perm os.
 			return fmt.Errorf("opening command file %s: %w", path, err)
 		}
 		defer func() { _ = fd.Close() }()
-		if _, err = fd.Write([]byte(message)); err != nil {
+		if _, err = fd.WriteString(message); err != nil {
 			return fmt.Errorf("writing message: %s: %w", path, err)
 		}
-		if _, err = fd.Write([]byte("\n")); err != nil {
+		if _, err = fd.WriteString("\n"); err != nil {
 			return fmt.Errorf("writing newline: %w", err)
 		}
 

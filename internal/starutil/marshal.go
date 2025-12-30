@@ -1,5 +1,7 @@
 package starutil
 
+//nolint:nolintlint
+
 import (
 	"fmt"
 	"time"

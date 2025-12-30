@@ -19,28 +19,23 @@ linters:
   disable:
     - cyclop
     - depguard
-    # - err113
+    - err113
     - exhaustruct
     - funcorder
     - funlen
     - gochecknoglobals
     - gocognit
-    - gocritic
     - gocyclo
     - godoclint
     - godot
     - godox
     - gosmopolitan
     - lll
-    - maintidx
-    - mirror
     - mnd
-    - nestif
     - noinlineerr
     - paralleltest
     - revive
     - tagliatelle
-    - testpackage
     - unparam #maybe
     - varnamelen
     - wsl # deprecated use wsl_v5

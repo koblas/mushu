@@ -188,10 +188,12 @@ func IsDebug() bool {
 	return found && value == "1"
 }
 
-// AddStepSummary adds some custom Markdown for each job so that it will be displayed on the summary page of a workflow run.
-// You can use job summaries to display and group unique content, such as test result summaries, so that someone viewing the
-// result of a workflow run doesn't need to go into the logs to see important information related to the run, such as failures.
+// AddStepSummary adds some custom Markdown for each job so that it will be displayed on the summary
+// page of a workflow run. You can use job summaries to display and group unique content, such as test
+// result summaries, so that someone viewing the result of a workflow run doesn't need to go into the
+// logs to see important information related to the run, such as failures.
 // see: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#adding-a-job-summary
+
 func AddStepSummary(summary string) error {
 	// os.O_CREATE: If pathname does not exist, create it as a regular file.
 	err := issueFileCommandWithPerm(GitHubSummaryPathEnvName, summary, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o644)

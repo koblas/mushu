@@ -484,7 +484,12 @@ func builtinMethods(recv starlark.Value, name string, methods map[string]builtin
 	}
 
 	// Allocate a closure over 'method'.
-	impl := func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	impl := func(
+		thread *starlark.Thread,
+		b *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
 		return method(b.Name(), b.Receiver(), args, kwargs)
 	}
 

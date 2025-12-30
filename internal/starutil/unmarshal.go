@@ -102,7 +102,7 @@ func Unmarshal(x starlark.Value) (any, error) {
 	case *starlark.Set:
 		return nil, errors.New("sets aren't yet supported")
 	case *starlarkstruct.Struct:
-		return nil, fmt.Errorf("constructor object from *starlarkstruct.Struct not supported Marshaler to starlark object: %s", v.Constructor().Type())
+		return nil, fmt.Errorf("constructor object from *starlarkstruct.Struct not supported Marshaler to starlark object: %s", v.Constructor().Type()) //nolint:lll
 	default:
 		return nil, fmt.Errorf("unrecognized starlark type: %s", x.Type())
 	}

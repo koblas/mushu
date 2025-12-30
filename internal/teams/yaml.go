@@ -117,3 +117,7 @@ func (s *YAMLTeamService) GetTeamMembers(ctx context.Context, teamSlug string) (
 func (s *YAMLTeamService) GetUserRoles(ctx context.Context, username string) ([]string, error) {
 	return s.GetUserTeams(ctx, username)
 }
+
+func (s *YAMLTeamService) Teams() map[string]Team {
+	return s.teams
+}

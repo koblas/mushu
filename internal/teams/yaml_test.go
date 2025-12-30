@@ -1,13 +1,15 @@
-package teams
+package teams_test
 
 import (
 	"context"
 	"os"
 	"testing"
+
+	"github.com/koblas/mushu/internal/teams"
 )
 
 func TestYAMLTeamService(t *testing.T) {
-	service := NewYAMLTeamService(os.DirFS("."), "testdata/teams.yaml")
+	service := teams.NewYAMLTeamService(os.DirFS("."), "testdata/teams.yaml")
 
 	ctx := context.Background()
 	err := service.Load(ctx)
@@ -39,8 +41,8 @@ func TestYAMLTeamService(t *testing.T) {
 }
 
 func TestCompositeTeamService(t *testing.T) {
-	yamlService := NewYAMLTeamService(os.DirFS("."), "testdata/teams.yaml")
-	compositeService := NewCompositeTeamService(yamlService, nil, false)
+	yamlService := teams.NewYAMLTeamService(os.DirFS("."), "testdata/teams.yaml")
+	compositeService := teams.NewCompositeTeamService(yamlService, nil, false)
 
 	ctx := context.Background()
 	err := yamlService.Load(ctx)

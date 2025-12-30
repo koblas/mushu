@@ -1,28 +1,29 @@
-package action
+package action_test
 
 import (
 	"bytes"
 	"strings"
 	"testing"
 
+	"github.com/koblas/mushu/internal/action"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestIssue(t *testing.T) {
 	b := bytes.NewBuffer(nil)
-	stdout = b
-	Issue("hello", "some\r\nmessage")
+	action.SetStdout(b)
+	action.Issue("hello", "some\r\nmessage")
 	assert.Equal(t, "::hello::some%0D%0Amessage\n", b.String())
 	b = bytes.NewBuffer(nil)
-	stdout = b
-	Issue("hello")
+	action.SetStdout(b)
+	action.Issue("hello")
 	assert.Equal(t, "::hello::\n", b.String())
 }
 
 func TestIssueCommand(t *testing.T) {
 	b := bytes.NewBuffer(nil)
-	stdout = b
-	IssueCommand("hello", map[string]string{
+	action.SetStdout(b)
+	action.IssueCommand("hello", map[string]string{
 		"some":  "a\n\rvalue,:%",
 		"other": "value",
 	}, "some\r\n%message")

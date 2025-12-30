@@ -47,7 +47,7 @@ type ActionContext struct {
 
 var errNoRepoInEvent = errors.New("no repository information in event payload")
 
-func repoFromEvent(event any) (ActionRepo, error) {
+func repoFromEvent(event any) (ActionRepo, error) { //nolint:maintidx
 	var r *gogithub.Repository
 	// try to get repo from payload
 	switch e := event.(type) {

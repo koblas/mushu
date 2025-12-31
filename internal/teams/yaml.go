@@ -66,30 +66,6 @@ func (s *YAMLTeamService) Load(ctx context.Context) error {
 	return nil
 }
 
-// loadTeamsFile loads a single teams YAML file
-func (s *YAMLTeamService) loadTeamsFile(ctx context.Context, filename string) error {
-	data, err := fs.ReadFile(s.fs, filename)
-	if err != nil {
-		// We don't want to fail if the file doesn't exist or is invalid
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid) {
-			return nil
-		}
-
-		return fmt.Errorf("failed to read teams file: %w", err)
-	}
-
-	var teamsData TeamsData
-	if err := yaml.Unmarshal(data, &teamsData); err != nil {
-		return fmt.Errorf("failed to parse teams file: %w", err)
-	}
-
-	maps.Copy(s.teams, teamsData.Teams)
-
-	slog.InfoContext(ctx, "Successfully loaded teams file", slog.String("teams_file", filename))
-
-	return nil
-}
-
 // GetUserTeams returns team memberships for a user
 func (s *YAMLTeamService) GetUserTeams(ctx context.Context, username string) ([]string, error) {
 	var teams []string
@@ -120,4 +96,28 @@ func (s *YAMLTeamService) GetUserRoles(ctx context.Context, username string) ([]
 
 func (s *YAMLTeamService) Teams() map[string]Team {
 	return s.teams
+}
+
+// loadTeamsFile loads a single teams YAML file
+func (s *YAMLTeamService) loadTeamsFile(ctx context.Context, filename string) error {
+	data, err := fs.ReadFile(s.fs, filename)
+	if err != nil {
+		// We don't want to fail if the file doesn't exist or is invalid
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid) {
+			return nil
+		}
+
+		return fmt.Errorf("failed to read teams file: %w", err)
+	}
+
+	var teamsData TeamsData
+	if err := yaml.Unmarshal(data, &teamsData); err != nil {
+		return fmt.Errorf("failed to parse teams file: %w", err)
+	}
+
+	maps.Copy(s.teams, teamsData.Teams)
+
+	slog.InfoContext(ctx, "Successfully loaded teams file", slog.String("teams_file", filename))
+
+	return nil
 }

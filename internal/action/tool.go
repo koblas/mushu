@@ -91,118 +91,10 @@ func Bool(b bool) *bool {
 	return &b
 }
 
-func (d *DownloadTool) destination() string {
-	return uuid.New().String()
-}
-
 var (
 	tmpRoot   *os.Root
 	cacheRoot *os.Root
 )
-
-func (d *DownloadTool) getTmpRoot() *os.Root {
-	if d.TmpRoot != nil {
-		return d.TmpRoot
-	}
-
-	if tmpRoot == nil {
-		r, err := os.OpenRoot(tempDirectory)
-		if err != nil {
-			panic(fmt.Sprintf("unable to open root: %v", err))
-		}
-		tmpRoot = r
-	}
-
-	return tmpRoot
-}
-
-func (d *DownloadTool) getCacheRoot() *os.Root {
-	if d.CacheRoot != nil {
-		return d.CacheRoot
-	}
-
-	if cacheRoot == nil {
-		r, err := os.OpenRoot(cacheDirectory)
-		if err != nil {
-			panic(fmt.Sprintf("unable to open root: %v", err))
-		}
-		cacheRoot = r
-	}
-
-	return cacheRoot
-}
-
-func (d *DownloadTool) ensureDestDir(dest string) error {
-	destDir := filepath.Dir(dest)
-	if destDir == "" {
-		return nil
-	}
-
-	root := d.getCacheRoot()
-
-	if err := root.MkdirAll(destDir, cachePerms); err != nil {
-		return fmt.Errorf("unable to create destination directory %s: %w", destDir, err)
-	}
-
-	return nil
-}
-
-func (d *DownloadTool) createEmptyCache(folder string) error {
-	root := d.getCacheRoot()
-
-	if err := root.RemoveAll(folder); err != nil {
-		return fmt.Errorf("removing prior incomplete cache %s: %w", folder, err)
-	}
-
-	err := root.MkdirAll(folder, cachePerms)
-	if err != nil {
-		return fmt.Errorf("creating cache folder %s: %w", folder, err)
-	}
-
-	return nil
-}
-
-func (d *DownloadTool) ensureDestNotExists(dest string) error {
-	root := d.getCacheRoot()
-
-	_, err := root.Stat(dest)
-	if err == nil {
-		return errors.New("already exists")
-	}
-	if !os.IsNotExist(err) {
-		return fmt.Errorf("checking destination %s: %w", dest, err)
-	}
-
-	return nil
-}
-
-func (d *DownloadTool) copyURL(ctx context.Context, dest io.Writer, source string) error {
-	wrapError := func(err error, format string, args ...any) error {
-		return fmt.Errorf("failed to download "+source+" "+format+" : %v", append(args, err)...)
-	}
-	if dest == nil {
-		return wrapError(errors.New("destination should not be null"), "")
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
-	if err != nil {
-		return wrapError(err, "download failed")
-	}
-	resp, err := d.httpClient.Do(req)
-	if err != nil {
-		return wrapError(err, "download failed")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return wrapError(fmt.Errorf("unexpected status code %d (%s). Expecting %d", resp.StatusCode, resp.Status, http.StatusOK), "")
-	}
-	_, err = io.Copy(dest, resp.Body)
-	if err != nil {
-		return wrapError(err, "failed to write to destination")
-	}
-
-	return nil
-}
 
 func jsArch() string {
 	// mapping https://github.com/golang/go/blob/98d2717499575afe13d9f815d46fcd6e384efb0c/src/go/build/syslist.go#L11
@@ -254,88 +146,6 @@ func (c CacheOptions) path() (string, error) {
 type Source struct {
 	Root *os.Root
 	Name string
-}
-
-func (d *DownloadTool) cache(source *Source, target string, options CacheOptions) (string, error) {
-	wrapError := func(err error, format string, args ...any) (string, error) {
-		return "", fmt.Errorf("failed to save "+source.Name+" to cache "+format+" : %v", append(args, err)...)
-	}
-
-	destFolder, err := options.path()
-	if err != nil {
-		return wrapError(err, "")
-	}
-	completeMarker := destFolder + ".complete"
-
-	// Cleanup any prior incomplete cache
-	slog.Debug("destination", "file", destFolder)
-	err = d.createEmptyCache(destFolder)
-	if err != nil {
-		return wrapError(err, "")
-	}
-	err = os.Remove(completeMarker)
-	if err != nil && !os.IsNotExist(err) {
-		return wrapError(err, "")
-	}
-
-	// Ensure provided arguments are namespaced to the destFolder
-	spath := filepath.Join(source.Root.Name(), source.Name)
-	err = filepath.WalkDir(spath, func(path string, info os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if info == nil || info.IsDir() {
-			return nil
-		}
-
-		destination := filepath.Join(destFolder, target)
-
-		slog.Debug("copying", "src", path, "dest", destination)
-
-		return d.copyToCache(destination, path)
-	})
-	if err != nil {
-		return wrapError(err, "copy all files")
-	}
-	root := d.getCacheRoot()
-	fd, err := root.Create(completeMarker)
-	if err != nil {
-		return wrapError(err, "mark copy complete")
-	}
-	_ = fd.Close()
-
-	return filepath.Join(root.Name(), destFolder), nil
-}
-
-func (d *DownloadTool) copyToCache(dest, src string) error {
-	stat, err := os.Stat(src)
-	if err != nil {
-		return fmt.Errorf("stat source file %s: %w", src, err)
-	}
-	in, err := os.Open(src) // #nosec G304 -- source controlled by code
-	if err != nil {
-		return fmt.Errorf("open source file %s: %w", src, err)
-	}
-
-	root := d.getCacheRoot()
-	err = root.MkdirAll(filepath.Dir(dest), cachePerms)
-	if err != nil {
-		return fmt.Errorf("make dest directory %s: %w", filepath.Dir(dest), err)
-	}
-	out, err := root.Create(dest)
-	if err != nil {
-		return fmt.Errorf("create dest file %s: %w", dest, err)
-	}
-	_, err = io.Copy(out, in)
-	if err != nil {
-		return fmt.Errorf("copy data: %w", err)
-	}
-	err = root.Chmod(dest, stat.Mode())
-	if err != nil {
-		return fmt.Errorf("chmod dest file %s: %w", dest, err)
-	}
-
-	return nil
 }
 
 // CacheFile caches a downloaded file (GUID) and installs it
@@ -491,4 +301,194 @@ func (d *DownloadTool) GetCachedToolOrDownload(ctx context.Context, cache CacheO
 	}
 
 	return path, nil
+}
+
+func (d *DownloadTool) destination() string {
+	return uuid.New().String()
+}
+
+func (d *DownloadTool) getTmpRoot() *os.Root {
+	if d.TmpRoot != nil {
+		return d.TmpRoot
+	}
+
+	if tmpRoot == nil {
+		r, err := os.OpenRoot(tempDirectory)
+		if err != nil {
+			panic(fmt.Sprintf("unable to open root: %v", err))
+		}
+		tmpRoot = r
+	}
+
+	return tmpRoot
+}
+
+func (d *DownloadTool) getCacheRoot() *os.Root {
+	if d.CacheRoot != nil {
+		return d.CacheRoot
+	}
+
+	if cacheRoot == nil {
+		r, err := os.OpenRoot(cacheDirectory)
+		if err != nil {
+			panic(fmt.Sprintf("unable to open root: %v", err))
+		}
+		cacheRoot = r
+	}
+
+	return cacheRoot
+}
+
+func (d *DownloadTool) ensureDestDir(dest string) error {
+	destDir := filepath.Dir(dest)
+	if destDir == "" {
+		return nil
+	}
+
+	root := d.getCacheRoot()
+
+	if err := root.MkdirAll(destDir, cachePerms); err != nil {
+		return fmt.Errorf("unable to create destination directory %s: %w", destDir, err)
+	}
+
+	return nil
+}
+
+func (d *DownloadTool) createEmptyCache(folder string) error {
+	root := d.getCacheRoot()
+
+	if err := root.RemoveAll(folder); err != nil {
+		return fmt.Errorf("removing prior incomplete cache %s: %w", folder, err)
+	}
+
+	err := root.MkdirAll(folder, cachePerms)
+	if err != nil {
+		return fmt.Errorf("creating cache folder %s: %w", folder, err)
+	}
+
+	return nil
+}
+
+func (d *DownloadTool) ensureDestNotExists(dest string) error {
+	root := d.getCacheRoot()
+
+	_, err := root.Stat(dest)
+	if err == nil {
+		return errors.New("already exists")
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("checking destination %s: %w", dest, err)
+	}
+
+	return nil
+}
+
+func (d *DownloadTool) copyURL(ctx context.Context, dest io.Writer, source string) error {
+	wrapError := func(err error, format string, args ...any) error {
+		return fmt.Errorf("failed to download "+source+" "+format+" : %v", append(args, err)...)
+	}
+	if dest == nil {
+		return wrapError(errors.New("destination should not be null"), "")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
+	if err != nil {
+		return wrapError(err, "download failed")
+	}
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return wrapError(err, "download failed")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return wrapError(fmt.Errorf("unexpected status code %d (%s). Expecting %d", resp.StatusCode, resp.Status, http.StatusOK), "")
+	}
+	_, err = io.Copy(dest, resp.Body)
+	if err != nil {
+		return wrapError(err, "failed to write to destination")
+	}
+
+	return nil
+}
+
+func (d *DownloadTool) cache(source *Source, target string, options CacheOptions) (string, error) {
+	wrapError := func(err error, format string, args ...any) (string, error) {
+		return "", fmt.Errorf("failed to save "+source.Name+" to cache "+format+" : %v", append(args, err)...)
+	}
+
+	destFolder, err := options.path()
+	if err != nil {
+		return wrapError(err, "")
+	}
+	completeMarker := destFolder + ".complete"
+
+	// Cleanup any prior incomplete cache
+	slog.Debug("destination", "file", destFolder)
+	err = d.createEmptyCache(destFolder)
+	if err != nil {
+		return wrapError(err, "")
+	}
+	err = os.Remove(completeMarker)
+	if err != nil && !os.IsNotExist(err) {
+		return wrapError(err, "")
+	}
+
+	// Ensure provided arguments are namespaced to the destFolder
+	spath := filepath.Join(source.Root.Name(), source.Name)
+	err = filepath.WalkDir(spath, func(path string, info os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if info == nil || info.IsDir() {
+			return nil
+		}
+
+		destination := filepath.Join(destFolder, target)
+
+		slog.Debug("copying", "src", path, "dest", destination)
+
+		return d.copyToCache(destination, path)
+	})
+	if err != nil {
+		return wrapError(err, "copy all files")
+	}
+	root := d.getCacheRoot()
+	fd, err := root.Create(completeMarker)
+	if err != nil {
+		return wrapError(err, "mark copy complete")
+	}
+	_ = fd.Close()
+
+	return filepath.Join(root.Name(), destFolder), nil
+}
+
+func (d *DownloadTool) copyToCache(dest, src string) error {
+	stat, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("stat source file %s: %w", src, err)
+	}
+	in, err := os.Open(src) // #nosec G304 -- source controlled by code
+	if err != nil {
+		return fmt.Errorf("open source file %s: %w", src, err)
+	}
+
+	root := d.getCacheRoot()
+	err = root.MkdirAll(filepath.Dir(dest), cachePerms)
+	if err != nil {
+		return fmt.Errorf("make dest directory %s: %w", filepath.Dir(dest), err)
+	}
+	out, err := root.Create(dest)
+	if err != nil {
+		return fmt.Errorf("create dest file %s: %w", dest, err)
+	}
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return fmt.Errorf("copy data: %w", err)
+	}
+	err = root.Chmod(dest, stat.Mode())
+	if err != nil {
+		return fmt.Errorf("chmod dest file %s: %w", dest, err)
+	}
+
+	return nil
 }
